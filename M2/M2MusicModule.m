@@ -735,11 +735,14 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     M2TrackCell *cell = [tableView dequeueReusableCellWithIdentifier:@"MusicTrackCell" forIndexPath:indexPath];
 
+    M2PlaybackManager *playback = M2PlaybackManager.sharedManager;
     M2Track *track = self.filteredTracks[indexPath.row];
-    M2Track *currentTrack = M2PlaybackManager.sharedManager.currentTrack;
+    M2Track *currentTrack = playback.currentTrack;
     BOOL isCurrent = (currentTrack != nil && [currentTrack.identifier isEqualToString:track.identifier]);
+    BOOL sameQueue = M2TrackQueuesMatchByIdentifier(playback.currentQueue, self.tracks);
+    BOOL showsPlaybackIndicator = (sameQueue && isCurrent && playback.isPlaying);
 
-    [cell configureWithTrack:track isCurrent:isCurrent];
+    [cell configureWithTrack:track isCurrent:isCurrent showsPlaybackIndicator:showsPlaybackIndicator];
     return cell;
 }
 
@@ -1463,10 +1466,12 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     M2TrackCell *cell = [tableView dequeueReusableCellWithIdentifier:@"FavoriteTrackCell" forIndexPath:indexPath];
 
+    M2PlaybackManager *playback = M2PlaybackManager.sharedManager;
     M2Track *track = self.filteredTracks[indexPath.row];
-    M2Track *currentTrack = M2PlaybackManager.sharedManager.currentTrack;
+    M2Track *currentTrack = playback.currentTrack;
     BOOL isCurrent = (currentTrack != nil && [currentTrack.identifier isEqualToString:track.identifier]);
-    [cell configureWithTrack:track isCurrent:isCurrent];
+    BOOL showsPlaybackIndicator = (isCurrent && playback.isPlaying);
+    [cell configureWithTrack:track isCurrent:isCurrent showsPlaybackIndicator:showsPlaybackIndicator];
 
     return cell;
 }
@@ -2408,6 +2413,11 @@ replacementString:(NSString *)string {
                                              object:nil];
 
     [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(handlePlaybackChanged)
+                                               name:M2PlaybackStateDidChangeNotification
+                                             object:nil];
+
+    [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(updateSleepButton)
                                                name:M2SleepTimerDidChangeNotification
                                              object:nil];
@@ -2426,6 +2436,11 @@ replacementString:(NSString *)string {
 - (void)handleAppForeground {
     [M2LibraryManager.sharedManager reloadTracks];
     [self reloadData];
+}
+
+- (void)handlePlaybackChanged {
+    [self updatePlayButtonState];
+    [self.tableView reloadData];
 }
 
 - (void)setupTableView {
@@ -2454,6 +2469,7 @@ replacementString:(NSString *)string {
     ]];
 
     self.tableView.tableHeaderView = [self headerViewForWidth:self.view.bounds.size.width];
+    [self updatePlayButtonState];
     [self updateSleepButton];
 }
 
@@ -2582,6 +2598,7 @@ replacementString:(NSString *)string {
     if (fabs(self.tableView.tableHeaderView.bounds.size.width - width) > 1.0) {
         self.tableView.tableHeaderView = [self headerViewForWidth:width];
         [self updateHeader];
+        [self updatePlayButtonState];
         [self updateSleepButton];
     }
     [self updateNavigationTitleVisibility];
@@ -2626,6 +2643,7 @@ replacementString:(NSString *)string {
     }
     self.tracks = [M2PlaylistStore.sharedStore tracksForPlaylist:self.playlist library:M2LibraryManager.sharedManager];
     [self updateHeader];
+    [self updatePlayButtonState];
     [self updateSleepButton];
     [self updateNavigationTitleVisibility];
     [self applySearchFilterAndReload];
@@ -2679,6 +2697,33 @@ replacementString:(NSString *)string {
                              completion:nil];
         }
     }
+
+    [self updatePlayButtonState];
+}
+
+- (BOOL)isCurrentQueueMatchingPlaylist {
+    if (self.tracks.count == 0) {
+        return NO;
+    }
+
+    M2PlaybackManager *playback = M2PlaybackManager.sharedManager;
+    return M2TrackQueuesMatchByIdentifier(playback.currentQueue, self.tracks);
+}
+
+- (void)updatePlayButtonState {
+    if (self.playButton == nil) {
+        return;
+    }
+
+    M2PlaybackManager *playback = M2PlaybackManager.sharedManager;
+    BOOL isPlaylistPlaying = [self isCurrentQueueMatchingPlaylist] &&
+    playback.isPlaying &&
+    (playback.currentTrack != nil);
+    NSString *symbol = isPlaylistPlaying ? @"pause.fill" : @"play.fill";
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:29.0
+                                                                                          weight:UIImageSymbolWeightSemibold];
+    [self.playButton setImage:[UIImage systemImageNamed:symbol withConfiguration:config] forState:UIControlStateNormal];
+    self.playButton.accessibilityLabel = isPlaylistPlaying ? @"Pause playlist" : @"Play playlist";
 }
 
 - (void)updateNavigationTitleVisibility {
@@ -2716,8 +2761,18 @@ replacementString:(NSString *)string {
         return;
     }
 
-    [M2PlaybackManager.sharedManager setShuffleEnabled:NO];
-    [M2PlaybackManager.sharedManager playTracks:self.tracks startIndex:0];
+    M2PlaybackManager *playback = M2PlaybackManager.sharedManager;
+    if ([self isCurrentQueueMatchingPlaylist] && playback.currentTrack != nil) {
+        [playback togglePlayPause];
+        [self updatePlayButtonState];
+        [self.tableView reloadData];
+        return;
+    }
+
+    [playback setShuffleEnabled:NO];
+    [playback playTracks:self.tracks startIndex:0];
+    [self updatePlayButtonState];
+    [self.tableView reloadData];
     [self openPlayer];
 }
 
@@ -2730,6 +2785,8 @@ replacementString:(NSString *)string {
     NSInteger randomStart = (NSInteger)arc4random_uniform((u_int32_t)self.tracks.count);
     [M2PlaybackManager.sharedManager playTracks:self.tracks startIndex:randomStart];
     [M2PlaybackManager.sharedManager setShuffleEnabled:YES];
+    [self updatePlayButtonState];
+    [self.tableView reloadData];
     [self openPlayer];
 }
 
@@ -2896,11 +2953,14 @@ replacementString:(NSString *)string {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     M2TrackCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PlaylistTrackCell" forIndexPath:indexPath];
 
+    M2PlaybackManager *playback = M2PlaybackManager.sharedManager;
     M2Track *track = self.filteredTracks[indexPath.row];
-    M2Track *currentTrack = M2PlaybackManager.sharedManager.currentTrack;
+    M2Track *currentTrack = playback.currentTrack;
     BOOL isCurrent = (currentTrack != nil && [currentTrack.identifier isEqualToString:track.identifier]);
+    BOOL sameQueue = [self isCurrentQueueMatchingPlaylist];
+    BOOL showsPlaybackIndicator = (sameQueue && isCurrent && playback.isPlaying);
 
-    [cell configureWithTrack:track isCurrent:isCurrent];
+    [cell configureWithTrack:track isCurrent:isCurrent showsPlaybackIndicator:showsPlaybackIndicator];
     return cell;
 }
 

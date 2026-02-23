@@ -70,9 +70,30 @@
 }
 
 - (void)configureWithTrack:(M2Track *)track isCurrent:(BOOL)isCurrent {
-    self.coverView.image = track.artwork;
+    [self configureWithTrack:track isCurrent:isCurrent showsPlaybackIndicator:NO];
+}
+
+- (void)configureWithTrack:(M2Track *)track
+                 isCurrent:(BOOL)isCurrent
+    showsPlaybackIndicator:(BOOL)showsPlaybackIndicator {
     self.titleLabel.text = track.title;
     self.durationLabel.text = M2FormatDuration(track.duration);
+
+    if (showsPlaybackIndicator && isCurrent) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:17.0
+                                                                                               weight:UIImageSymbolWeightSemibold];
+        self.coverView.image = [UIImage systemImageNamed:@"pause.fill" withConfiguration:config];
+        self.coverView.tintColor = UIColor.labelColor;
+        self.coverView.backgroundColor = UIColor.clearColor;
+        self.coverView.contentMode = UIViewContentModeCenter;
+        self.titleLabel.textColor = UIColor.labelColor;
+        return;
+    }
+
+    self.coverView.image = track.artwork;
+    self.coverView.tintColor = nil;
+    self.coverView.backgroundColor = UIColor.clearColor;
+    self.coverView.contentMode = UIViewContentModeScaleAspectFill;
     self.titleLabel.textColor = isCurrent ? [UIColor colorWithRed:1.0 green:0.83 blue:0.08 alpha:1.0] : UIColor.labelColor;
 }
 

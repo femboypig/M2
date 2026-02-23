@@ -12,6 +12,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface M2TrackCell : UITableViewCell
 
 - (void)configureWithTrack:(M2Track *)track isCurrent:(BOOL)isCurrent;
+- (void)configureWithTrack:(M2Track *)track
+                 isCurrent:(BOOL)isCurrent
+    showsPlaybackIndicator:(BOOL)showsPlaybackIndicator;
 
 @end
 
