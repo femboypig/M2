@@ -29,9 +29,38 @@ static NSString * const kTrackAnalyticsTrackIDKey = @"trackID";
 static NSString * const kTrackAnalyticsPlayCountKey = @"playCount";
 static NSString * const kTrackAnalyticsSkipCountKey = @"skipCount";
 static NSString * const kTrackAnalyticsUpdatedAtKey = @"updatedAt";
+static NSString * const kTrackMetadataCacheDirectoryName = @"TrackMetadataCache";
+static NSString * const kTrackMetadataArtworkDirectoryName = @"Artwork";
+static NSString * const kTrackMetadataCacheFileName = @"track_metadata_cache_v1.json";
+static NSString * const kTrackMetadataCacheModifiedAtMSKey = @"modifiedAtMs";
+static NSString * const kTrackMetadataCacheFileSizeKey = @"fileSize";
+static NSString * const kTrackMetadataCacheTitleKey = @"title";
+static NSString * const kTrackMetadataCacheArtistKey = @"artist";
+static NSString * const kTrackMetadataCacheDurationKey = @"duration";
+static NSString * const kTrackMetadataCacheArtworkFileKey = @"artworkFile";
 
 static NSArray<NSString *> *M2LegacyPlaylistsDefaultsKeys(void) {
     return @[@"m2_playlists_v1", @"m2_playlists"];
+}
+
+static NSString *M2StableHashString(NSString *value) {
+    if (value.length == 0) {
+        return @"0";
+    }
+
+    NSData *data = [value dataUsingEncoding:NSUTF8StringEncoding];
+    if (data.length == 0) {
+        return @"0";
+    }
+
+    const uint8_t *bytes = data.bytes;
+    uint64_t hash = 1469598103934665603ULL; // FNV-1a 64-bit
+    for (NSUInteger index = 0; index < data.length; index += 1) {
+        hash ^= bytes[index];
+        hash *= 1099511628211ULL;
+    }
+
+    return [NSString stringWithFormat:@"%016llx", hash];
 }
 
 static void M2SyncSleepLiveActivity(NSTimeInterval remainingSeconds) {
@@ -466,6 +495,9 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 @property (nonatomic, copy) NSDictionary<NSString *, M2Track *> *tracksByID;
 @property (nonatomic, copy) NSDictionary<NSString *, M2Track *> *tracksByRelativeID;
 @property (nonatomic, copy) NSDictionary<NSString *, M2Track *> *tracksByFileName;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *trackMetadataCache;
+@property (nonatomic, assign) BOOL trackMetadataCacheLoaded;
+@property (nonatomic, assign) BOOL trackMetadataCacheDirty;
 
 @end
 
@@ -487,6 +519,9 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         _tracksByID = @{};
         _tracksByRelativeID = @{};
         _tracksByFileName = @{};
+        _trackMetadataCache = [NSMutableDictionary dictionary];
+        _trackMetadataCacheLoaded = NO;
+        _trackMetadataCacheDirty = NO;
         [self reloadTracks];
     }
     return self;
@@ -514,6 +549,105 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
 - (NSArray<M2Track *> *)tracks {
     return self.cachedTracks;
+}
+
+- (NSURL *)trackMetadataCacheDirectoryURL {
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    NSURL *baseURL = [fileManager URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject;
+    if (baseURL == nil) {
+        baseURL = [fileManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
+    }
+    if (baseURL == nil) {
+        baseURL = [self musicDirectoryURL];
+    }
+
+    NSURL *m2DirectoryURL = [baseURL URLByAppendingPathComponent:@"M2" isDirectory:YES];
+    NSURL *cacheDirectoryURL = [m2DirectoryURL URLByAppendingPathComponent:kTrackMetadataCacheDirectoryName isDirectory:YES];
+    NSError *directoryError = nil;
+    [fileManager createDirectoryAtURL:cacheDirectoryURL
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&directoryError];
+    if (directoryError != nil) {
+        NSLog(@"Cannot create track metadata cache directory: %@", directoryError.localizedDescription);
+    }
+    return cacheDirectoryURL;
+}
+
+- (NSURL *)trackArtworkCacheDirectoryURL {
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    NSURL *artworkDirectoryURL = [[self trackMetadataCacheDirectoryURL] URLByAppendingPathComponent:kTrackMetadataArtworkDirectoryName
+                                                                                         isDirectory:YES];
+    NSError *directoryError = nil;
+    [fileManager createDirectoryAtURL:artworkDirectoryURL
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&directoryError];
+    if (directoryError != nil) {
+        NSLog(@"Cannot create track artwork cache directory: %@", directoryError.localizedDescription);
+    }
+    return artworkDirectoryURL;
+}
+
+- (NSURL *)trackMetadataCacheFileURL {
+    return [[self trackMetadataCacheDirectoryURL] URLByAppendingPathComponent:kTrackMetadataCacheFileName];
+}
+
+- (void)loadTrackMetadataCacheIfNeeded {
+    if (self.trackMetadataCacheLoaded) {
+        return;
+    }
+    self.trackMetadataCacheLoaded = YES;
+    [self.trackMetadataCache removeAllObjects];
+
+    NSURL *cacheFileURL = [self trackMetadataCacheFileURL];
+    if (![NSFileManager.defaultManager fileExistsAtPath:cacheFileURL.path]) {
+        return;
+    }
+
+    NSData *data = [NSData dataWithContentsOfURL:cacheFileURL];
+    if (data.length == 0) {
+        return;
+    }
+
+    NSError *jsonError = nil;
+    id object = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+    if (jsonError != nil || ![object isKindOfClass:NSDictionary.class]) {
+        NSLog(@"Track metadata cache parse error: %@", jsonError.localizedDescription);
+        return;
+    }
+
+    NSDictionary *rawCache = (NSDictionary *)object;
+    for (id key in rawCache) {
+        id value = rawCache[key];
+        if ([key isKindOfClass:NSString.class] && [value isKindOfClass:NSDictionary.class]) {
+            self.trackMetadataCache[(NSString *)key] = (NSDictionary<NSString *, id> *)value;
+        }
+    }
+}
+
+- (void)persistTrackMetadataCacheIfNeeded {
+    if (!self.trackMetadataCacheDirty) {
+        return;
+    }
+
+    NSURL *cacheFileURL = [self trackMetadataCacheFileURL];
+    NSDictionary<NSString *, NSDictionary<NSString *, id> *> *payload = [self.trackMetadataCache copy] ?: @{};
+    NSError *jsonError = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:&jsonError];
+    if (jsonError != nil || data.length == 0) {
+        NSLog(@"Track metadata cache encode error: %@", jsonError.localizedDescription);
+        return;
+    }
+
+    NSError *writeError = nil;
+    [data writeToURL:cacheFileURL options:NSDataWritingAtomic error:&writeError];
+    if (writeError != nil) {
+        NSLog(@"Track metadata cache write error: %@", writeError.localizedDescription);
+        return;
+    }
+
+    self.trackMetadataCacheDirty = NO;
 }
 
 - (NSString *)normalizedPathStringFromIdentifier:(NSString *)identifier {
@@ -568,13 +702,165 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     return @"";
 }
 
+- (NSString *)cacheKeyForFileURL:(NSURL *)fileURL inMusicDirectory:(NSURL *)musicDirectoryURL {
+    NSString *musicPath = musicDirectoryURL.path ?: @"";
+    NSString *filePath = fileURL.path ?: @"";
+    if (musicPath.length > 0 && [filePath hasPrefix:musicPath]) {
+        NSString *relative = [filePath substringFromIndex:musicPath.length];
+        while ([relative hasPrefix:@"/"]) {
+            relative = [relative substringFromIndex:1];
+        }
+        if (relative.length > 0) {
+            return relative.lowercaseString;
+        }
+    }
+
+    NSString *fallback = fileURL.lastPathComponent.lowercaseString;
+    if (fallback.length > 0) {
+        return fallback;
+    }
+    return filePath.lowercaseString ?: @"";
+}
+
+- (NSNumber *)cacheTimestampValueForDate:(NSDate *)date {
+    if (![date isKindOfClass:NSDate.class]) {
+        return @(0);
+    }
+    NSTimeInterval timestamp = date.timeIntervalSince1970;
+    if (!isfinite(timestamp) || timestamp < 0.0) {
+        return @(0);
+    }
+    return @((long long)llround(timestamp * 1000.0));
+}
+
+- (BOOL)cacheEntry:(NSDictionary<NSString *, id> *)entry
+  matchesFileSize:(NSNumber *)fileSize
+      modifiedDate:(NSDate *)modifiedDate {
+    if (![entry isKindOfClass:NSDictionary.class]) {
+        return NO;
+    }
+
+    NSNumber *cachedSize = entry[kTrackMetadataCacheFileSizeKey];
+    NSNumber *cachedTimestamp = entry[kTrackMetadataCacheModifiedAtMSKey];
+    if (![cachedSize isKindOfClass:NSNumber.class] || ![cachedTimestamp isKindOfClass:NSNumber.class]) {
+        return NO;
+    }
+
+    long long currentSize = [fileSize isKindOfClass:NSNumber.class] ? fileSize.longLongValue : 0;
+    long long currentTimestamp = [self cacheTimestampValueForDate:modifiedDate].longLongValue;
+    return (cachedSize.longLongValue == currentSize &&
+            cachedTimestamp.longLongValue == currentTimestamp);
+}
+
+- (NSDictionary<NSString *, id> *)cacheEntryForTrack:(M2Track *)track
+                                            fileSize:(NSNumber *)fileSize
+                                        modifiedDate:(NSDate *)modifiedDate
+                                     artworkFileName:(nullable NSString *)artworkFileName {
+    NSMutableDictionary<NSString *, id> *entry = [NSMutableDictionary dictionary];
+    entry[kTrackMetadataCacheModifiedAtMSKey] = [self cacheTimestampValueForDate:modifiedDate];
+    entry[kTrackMetadataCacheFileSizeKey] = [fileSize isKindOfClass:NSNumber.class] ? fileSize : @(0);
+    entry[kTrackMetadataCacheTitleKey] = track.title ?: @"";
+    entry[kTrackMetadataCacheArtistKey] = track.artist ?: @"";
+    entry[kTrackMetadataCacheDurationKey] = @(MAX(0.0, track.duration));
+    if (artworkFileName.length > 0) {
+        entry[kTrackMetadataCacheArtworkFileKey] = artworkFileName;
+    }
+    return [entry copy];
+}
+
+- (nullable UIImage *)cachedArtworkForFileName:(NSString *)fileName {
+    if (fileName.length == 0) {
+        return nil;
+    }
+    NSURL *fileURL = [[self trackArtworkCacheDirectoryURL] URLByAppendingPathComponent:fileName];
+    if (![NSFileManager.defaultManager fileExistsAtPath:fileURL.path]) {
+        return nil;
+    }
+    return [UIImage imageWithContentsOfFile:fileURL.path];
+}
+
+- (nullable NSString *)storeArtworkInCache:(UIImage *)image
+                                  cacheKey:(NSString *)cacheKey
+                                  fileSize:(NSNumber *)fileSize
+                              modifiedDate:(NSDate *)modifiedDate {
+    if (image == nil || cacheKey.length == 0) {
+        return nil;
+    }
+
+    NSData *artworkData = UIImageJPEGRepresentation(image, 0.86);
+    if (artworkData.length == 0) {
+        artworkData = UIImagePNGRepresentation(image);
+    }
+    if (artworkData.length == 0) {
+        return nil;
+    }
+
+    NSString *seed = [NSString stringWithFormat:@"%@|%@|%@",
+                      cacheKey,
+                      ([fileSize isKindOfClass:NSNumber.class] ? fileSize.stringValue : @"0"),
+                      [self cacheTimestampValueForDate:modifiedDate].stringValue];
+    NSString *fileName = [NSString stringWithFormat:@"%@.jpg", M2StableHashString(seed)];
+    NSURL *fileURL = [[self trackArtworkCacheDirectoryURL] URLByAppendingPathComponent:fileName];
+
+    NSError *writeError = nil;
+    [artworkData writeToURL:fileURL options:NSDataWritingAtomic error:&writeError];
+    if (writeError != nil) {
+        NSLog(@"Track artwork cache write error: %@", writeError.localizedDescription);
+        return nil;
+    }
+    return fileName;
+}
+
+- (nullable M2Track *)trackFromCacheEntry:(NSDictionary<NSString *, id> *)entry
+                                  fileURL:(NSURL *)fileURL
+                                 fileSize:(NSNumber *)fileSize
+                             modifiedDate:(NSDate *)modifiedDate {
+    if (![self cacheEntry:entry matchesFileSize:fileSize modifiedDate:modifiedDate]) {
+        return nil;
+    }
+
+    NSString *fallbackTitle = fileURL.lastPathComponent.stringByDeletingPathExtension;
+    NSString *title = [entry[kTrackMetadataCacheTitleKey] isKindOfClass:NSString.class] ? entry[kTrackMetadataCacheTitleKey] : fallbackTitle;
+    if (title.length == 0) {
+        title = fallbackTitle.length > 0 ? fallbackTitle : fileURL.lastPathComponent;
+    }
+    NSString *artist = [entry[kTrackMetadataCacheArtistKey] isKindOfClass:NSString.class] ? entry[kTrackMetadataCacheArtistKey] : @"";
+    NSNumber *durationValue = [entry[kTrackMetadataCacheDurationKey] isKindOfClass:NSNumber.class] ? entry[kTrackMetadataCacheDurationKey] : @(0);
+    NSTimeInterval duration = durationValue.doubleValue;
+    if (!isfinite(duration) || duration < 0.0) {
+        duration = 0.0;
+    }
+
+    NSString *artworkFileName = [entry[kTrackMetadataCacheArtworkFileKey] isKindOfClass:NSString.class] ? entry[kTrackMetadataCacheArtworkFileKey] : nil;
+    UIImage *artwork = [self cachedArtworkForFileName:artworkFileName];
+    if (artwork == nil) {
+        artwork = M2PlaceholderArtwork(title, CGSizeMake(180, 180));
+    }
+
+    M2Track *track = [[M2Track alloc] init];
+    track.identifier = fileURL.path;
+    track.title = title;
+    track.artist = artist ?: @"";
+    track.fileName = fileURL.lastPathComponent;
+    track.url = fileURL;
+    track.duration = duration;
+    track.artwork = artwork;
+    return track;
+}
+
 - (NSArray<M2Track *> *)reloadTracks {
     NSURL *musicURL = [self musicDirectoryURL];
     NSFileManager *fileManager = NSFileManager.defaultManager;
+    [self loadTrackMetadataCacheIfNeeded];
+    NSDictionary<NSString *, NSDictionary<NSString *, id> *> *previousCacheSnapshot = [self.trackMetadataCache copy] ?: @{};
+    NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *nextCache = [NSMutableDictionary dictionaryWithCapacity:previousCacheSnapshot.count];
 
     NSMutableArray<M2Track *> *tracks = [NSMutableArray array];
     NSDirectoryEnumerator<NSURL *> *enumerator = [fileManager enumeratorAtURL:musicURL
-                                                   includingPropertiesForKeys:@[NSURLIsDirectoryKey, NSURLNameKey]
+                                                   includingPropertiesForKeys:@[NSURLIsDirectoryKey,
+                                                                                NSURLNameKey,
+                                                                                NSURLContentModificationDateKey,
+                                                                                NSURLFileSizeKey]
                                                                       options:NSDirectoryEnumerationSkipsHiddenFiles
                                                                  errorHandler:^BOOL(NSURL * _Nonnull url, NSError * _Nonnull error) {
         NSLog(@"Directory enumeration error for %@: %@", url.path, error.localizedDescription);
@@ -593,7 +879,45 @@ static NSData *M2EncodedCoverData(UIImage *image) {
             continue;
         }
 
-        M2Track *track = [self trackFromURL:fileURL];
+        NSNumber *fileSize = nil;
+        NSDate *modifiedDate = nil;
+        [fileURL getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil];
+        [fileURL getResourceValue:&modifiedDate forKey:NSURLContentModificationDateKey error:nil];
+        if (![fileSize isKindOfClass:NSNumber.class]) {
+            fileSize = @(0);
+        }
+        if (![modifiedDate isKindOfClass:NSDate.class]) {
+            modifiedDate = [NSDate dateWithTimeIntervalSince1970:0];
+        }
+
+        NSString *cacheKey = [self cacheKeyForFileURL:fileURL inMusicDirectory:musicURL];
+        NSDictionary<NSString *, id> *cachedEntry = cacheKey.length > 0 ? self.trackMetadataCache[cacheKey] : nil;
+        M2Track *track = [self trackFromCacheEntry:cachedEntry
+                                           fileURL:fileURL
+                                          fileSize:fileSize
+                                      modifiedDate:modifiedDate];
+        NSDictionary<NSString *, id> *entryForNext = nil;
+        if (track != nil && cachedEntry != nil) {
+            entryForNext = cachedEntry;
+        } else {
+            UIImage *embeddedArtwork = nil;
+            track = [self trackFromURL:fileURL embeddedArtworkOut:&embeddedArtwork];
+            if (track != nil) {
+                NSString *artworkFileName = [self storeArtworkInCache:embeddedArtwork
+                                                              cacheKey:cacheKey
+                                                              fileSize:fileSize
+                                                          modifiedDate:modifiedDate];
+                entryForNext = [self cacheEntryForTrack:track
+                                               fileSize:fileSize
+                                           modifiedDate:modifiedDate
+                                        artworkFileName:artworkFileName];
+            }
+        }
+
+        if (cacheKey.length > 0 && entryForNext != nil) {
+            nextCache[cacheKey] = entryForNext;
+        }
+
         if (track != nil) {
             [tracks addObject:track];
         }
@@ -642,6 +966,14 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     self.tracksByID = [mapping copy];
     self.tracksByRelativeID = [relativeMapping copy];
     self.tracksByFileName = [fileNameMapping copy];
+
+    self.trackMetadataCache = nextCache;
+    NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nextCacheSnapshot = [nextCache copy] ?: @{};
+    if (![previousCacheSnapshot isEqualToDictionary:nextCacheSnapshot]) {
+        self.trackMetadataCacheDirty = YES;
+        [self persistTrackMetadataCacheIfNeeded];
+    }
+
     return self.cachedTracks;
 }
 
@@ -723,7 +1055,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     return YES;
 }
 
-- (nullable M2Track *)trackFromURL:(NSURL *)fileURL {
+- (nullable M2Track *)trackFromURL:(NSURL *)fileURL embeddedArtworkOut:(UIImage * _Nullable __autoreleasing *)embeddedArtworkOut {
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:fileURL options:nil];
 
     NSString *fallbackTitle = fileURL.lastPathComponent.stringByDeletingPathExtension;
@@ -739,7 +1071,12 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         duration = 0;
     }
 
-    UIImage *artwork = [self artworkFromAsset:asset];
+    UIImage *embeddedArtwork = [self artworkFromAsset:asset];
+    if (embeddedArtworkOut != NULL) {
+        *embeddedArtworkOut = embeddedArtwork;
+    }
+
+    UIImage *artwork = embeddedArtwork;
     if (artwork == nil) {
         artwork = M2PlaceholderArtwork(title, CGSizeMake(180, 180));
     }
@@ -790,6 +1127,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 @interface M2PlaylistStore ()
 
 @property (nonatomic, copy) NSArray<M2Playlist *> *cachedPlaylists;
+@property (nonatomic, strong) NSCache<NSString *, UIImage *> *coverCache;
 
 @end
 
@@ -808,6 +1146,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     self = [super init];
     if (self) {
         _cachedPlaylists = @[];
+        _coverCache = [[NSCache alloc] init];
         [self reloadPlaylists];
     }
     return self;
@@ -815,6 +1154,23 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
 - (NSArray<M2Playlist *> *)playlists {
     return self.cachedPlaylists;
+}
+
+- (void)invalidateCoverCache {
+    [self.coverCache removeAllObjects];
+}
+
+- (NSString *)coverCacheKeyForPlaylist:(M2Playlist *)playlist size:(CGSize)size {
+    if (playlist == nil) {
+        return @"";
+    }
+
+    NSString *playlistID = playlist.playlistID ?: @"";
+    NSString *customCover = playlist.customCoverFileName ?: @"";
+    NSString *trackSignature = [playlist.trackIDs componentsJoinedByString:@"|"] ?: @"";
+    NSString *base = [NSString stringWithFormat:@"%@|%@|%@", playlistID, customCover, trackSignature];
+    NSString *hashPart = M2StableHashString(base);
+    return [NSString stringWithFormat:@"%@|%ldx%ld", hashPart, (long)llround(size.width), (long)llround(size.height)];
 }
 
 - (nullable NSArray<NSDictionary<NSString *, id> *> *)playlistDictionariesFromArrayObject:(id)object {
@@ -995,6 +1351,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     BOOL repairedReferences = [self repairTrackReferencesIfNeededForPlaylists:loaded];
     self.cachedPlaylists = [loaded copy];
+    [self invalidateCoverCache];
     if (repairedReferences) {
         [self persistPlaylists];
     } else if (storedDictionaries.count > 0 &&
@@ -1052,6 +1409,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     NSMutableArray<M2Playlist *> *updated = [self.cachedPlaylists mutableCopy];
     [updated addObject:playlist];
     self.cachedPlaylists = [updated copy];
+    [self invalidateCoverCache];
 
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
@@ -1075,6 +1433,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     playlist.name = trimmedName;
+    [self invalidateCoverCache];
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
     return YES;
@@ -1104,6 +1463,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     NSMutableArray<M2Playlist *> *updated = [self.cachedPlaylists mutableCopy];
     [updated removeObjectAtIndex:index];
     self.cachedPlaylists = [updated copy];
+    [self invalidateCoverCache];
 
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
@@ -1139,6 +1499,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     playlist.trackIDs = [updatedTrackIDs copy];
+    [self invalidateCoverCache];
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
     return YES;
@@ -1170,6 +1531,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     playlist.trackIDs = updatedIDs;
+    [self invalidateCoverCache];
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
     return YES;
@@ -1193,6 +1555,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     playlist.trackIDs = [updated copy];
+    [self invalidateCoverCache];
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
     return YES;
@@ -1222,6 +1585,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         return NO;
     }
 
+    [self invalidateCoverCache];
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
     return YES;
@@ -1244,6 +1608,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
         [self removeCustomCoverIfNeededForPlaylist:playlist];
         playlist.customCoverFileName = nil;
+        [self invalidateCoverCache];
         [self persistPlaylists];
         [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
         return YES;
@@ -1257,6 +1622,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     playlist.customCoverFileName = coverFileName;
+    [self invalidateCoverCache];
     [self persistPlaylists];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaylistsDidChangeNotification object:nil];
     return YES;
@@ -1276,8 +1642,19 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 - (UIImage *)coverForPlaylist:(M2Playlist *)playlist
                       library:(M2LibraryManager *)library
                          size:(CGSize)size {
+    NSString *cacheKey = [self coverCacheKeyForPlaylist:playlist size:size];
+    if (cacheKey.length > 0) {
+        UIImage *cachedCover = [self.coverCache objectForKey:cacheKey];
+        if (cachedCover != nil) {
+            return cachedCover;
+        }
+    }
+
     UIImage *customCover = [self customCoverForPlaylist:playlist];
     if (customCover != nil) {
+        if (cacheKey.length > 0) {
+            [self.coverCache setObject:customCover forKey:cacheKey];
+        }
         return customCover;
     }
 
@@ -1288,10 +1665,18 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     if (images.count == 0) {
-        return M2PlaceholderArtwork(playlist.name, size);
+        UIImage *placeholder = M2PlaceholderArtwork(playlist.name, size);
+        if (cacheKey.length > 0 && placeholder != nil) {
+            [self.coverCache setObject:placeholder forKey:cacheKey];
+        }
+        return placeholder;
     }
 
-    return M2CollageCover(images, size);
+    UIImage *cover = M2CollageCover(images, size);
+    if (cacheKey.length > 0 && cover != nil) {
+        [self.coverCache setObject:cover forKey:cacheKey];
+    }
+    return cover;
 }
 
 - (void)persistPlaylists {
@@ -1548,7 +1933,15 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 }
 
 - (nullable NSManagedObjectContext *)analyticsContext {
-    id<UIApplicationDelegate> appDelegate = UIApplication.sharedApplication.delegate;
+    __block id<UIApplicationDelegate> appDelegate = nil;
+    if (NSThread.isMainThread) {
+        appDelegate = UIApplication.sharedApplication.delegate;
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            appDelegate = UIApplication.sharedApplication.delegate;
+        });
+    }
+
     if (![appDelegate isKindOfClass:AppDelegate.class]) {
         return nil;
     }

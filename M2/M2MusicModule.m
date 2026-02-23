@@ -775,9 +775,11 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
         return;
     }
 
-    [playback setShuffleEnabled:NO];
-    [playback playTracks:playlistQueue startIndex:playlistIndex];
     [self openPlayer];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [playback setShuffleEnabled:NO];
+        [playback playTracks:playlistQueue startIndex:playlistIndex];
+    });
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
@@ -1491,9 +1493,13 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         return;
     }
 
-    [M2PlaybackManager.sharedManager setShuffleEnabled:NO];
-    [M2PlaybackManager.sharedManager playTracks:self.filteredTracks startIndex:indexPath.row];
+    NSArray<M2Track *> *queue = self.filteredTracks;
+    NSInteger startIndex = indexPath.row;
     [self openPlayer];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [M2PlaybackManager.sharedManager setShuffleEnabled:NO];
+        [M2PlaybackManager.sharedManager playTracks:queue startIndex:startIndex];
+    });
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
@@ -2769,11 +2775,14 @@ replacementString:(NSString *)string {
         return;
     }
 
-    [playback setShuffleEnabled:NO];
-    [playback playTracks:self.tracks startIndex:0];
-    [self updatePlayButtonState];
-    [self.tableView reloadData];
+    NSArray<M2Track *> *queue = self.tracks;
     [self openPlayer];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [playback setShuffleEnabled:NO];
+        [playback playTracks:queue startIndex:0];
+        [self updatePlayButtonState];
+        [self.tableView reloadData];
+    });
 }
 
 - (void)shuffleTapped {
@@ -2783,11 +2792,14 @@ replacementString:(NSString *)string {
     }
 
     NSInteger randomStart = (NSInteger)arc4random_uniform((u_int32_t)self.tracks.count);
-    [M2PlaybackManager.sharedManager playTracks:self.tracks startIndex:randomStart];
-    [M2PlaybackManager.sharedManager setShuffleEnabled:YES];
-    [self updatePlayButtonState];
-    [self.tableView reloadData];
+    NSArray<M2Track *> *queue = self.tracks;
     [self openPlayer];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [M2PlaybackManager.sharedManager playTracks:queue startIndex:randomStart];
+        [M2PlaybackManager.sharedManager setShuffleEnabled:YES];
+        [self updatePlayButtonState];
+        [self.tableView reloadData];
+    });
 }
 
 - (void)sleepTimerTapped {
@@ -2980,9 +2992,13 @@ replacementString:(NSString *)string {
         return;
     }
 
-    [M2PlaybackManager.sharedManager setShuffleEnabled:NO];
-    [M2PlaybackManager.sharedManager playTracks:self.filteredTracks startIndex:indexPath.row];
+    NSArray<M2Track *> *queue = self.filteredTracks;
+    NSInteger startIndex = indexPath.row;
     [self openPlayer];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [M2PlaybackManager.sharedManager setShuffleEnabled:NO];
+        [M2PlaybackManager.sharedManager playTracks:queue startIndex:startIndex];
+    });
 }
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
