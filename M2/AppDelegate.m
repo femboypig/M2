@@ -7,6 +7,7 @@
 
 #import "AppDelegate.h"
 #import <AVFoundation/AVFoundation.h>
+#import <TargetConditionals.h>
 
 @interface AppDelegate ()
 
@@ -17,6 +18,7 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for customization after application launch.
+#if !TARGET_OS_MACCATALYST
     [application beginReceivingRemoteControlEvents];
 
     NSError *sessionError = nil;
@@ -31,6 +33,7 @@
     if (sessionError != nil) {
         NSLog(@"Audio session activation error: %@", sessionError.localizedDescription);
     }
+#endif
 
     return YES;
 }

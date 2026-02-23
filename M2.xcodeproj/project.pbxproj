@@ -8,7 +8,6 @@
 
 /* Begin PBXFileReference section */
 		91322FB62F4A7F8C002ADCB9 /* M2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = M2.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A1B2C3D12F500001002ADCB9 /* M2LiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = M2LiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -18,13 +17,6 @@
 				Info.plist,
 			);
 			target = 91322FB52F4A7F8C002ADCB9 /* M2 */;
-		};
-		A1B2C3D22F500001002ADCB9 /* Exceptions for "M2LiveActivityExtension" folder in "M2LiveActivityExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = A1B2C3D82F500001002ADCB9 /* M2LiveActivityExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -37,25 +29,10 @@
 			path = M2;
 			sourceTree = "<group>";
 		};
-		A1B2C3D32F500001002ADCB9 /* M2LiveActivityExtension */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				A1B2C3D22F500001002ADCB9 /* Exceptions for "M2LiveActivityExtension" folder in "M2LiveActivityExtension" target */,
-			);
-			path = M2LiveActivityExtension;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		91322FB32F4A7F8C002ADCB9 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A1B2C3D42F500001002ADCB9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -69,7 +46,6 @@
 			isa = PBXGroup;
 			children = (
 				91322FB82F4A7F8C002ADCB9 /* M2 */,
-				A1B2C3D32F500001002ADCB9 /* M2LiveActivityExtension */,
 				91322FB72F4A7F8C002ADCB9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -78,7 +54,6 @@
 			isa = PBXGroup;
 			children = (
 				91322FB62F4A7F8C002ADCB9 /* M2.app */,
-				A1B2C3D12F500001002ADCB9 /* M2LiveActivityExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -108,28 +83,6 @@
 			productReference = 91322FB62F4A7F8C002ADCB9 /* M2.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A1B2C3D82F500001002ADCB9 /* M2LiveActivityExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A1B2C3DC2F500001002ADCB9 /* Build configuration list for PBXNativeTarget "M2LiveActivityExtension" */;
-			buildPhases = (
-				A1B2C3D72F500001002ADCB9 /* Sources */,
-				A1B2C3D42F500001002ADCB9 /* Frameworks */,
-				A1B2C3D62F500001002ADCB9 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				A1B2C3D32F500001002ADCB9 /* M2LiveActivityExtension */,
-			);
-			name = M2LiveActivityExtension;
-			packageProductDependencies = (
-			);
-			productName = M2LiveActivityExtension;
-			productReference = A1B2C3D12F500001002ADCB9 /* M2LiveActivityExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -140,9 +93,6 @@
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
 					91322FB52F4A7F8C002ADCB9 = {
-						CreatedOnToolsVersion = 16.2;
-					};
-					A1B2C3D82F500001002ADCB9 = {
 						CreatedOnToolsVersion = 16.2;
 					};
 				};
@@ -162,7 +112,6 @@
 			projectRoot = "";
 			targets = (
 				91322FB52F4A7F8C002ADCB9 /* M2 */,
-				A1B2C3D82F500001002ADCB9 /* M2LiveActivityExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -175,24 +124,10 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A1B2C3D62F500001002ADCB9 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		91322FB22F4A7F8C002ADCB9 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A1B2C3D72F500001002ADCB9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -214,7 +149,6 @@
 				INFOPLIST_FILE = M2/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -223,12 +157,15 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 12.0f;
 				PRODUCT_BUNDLE_IDENTIFIER = com.loser.M2;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.loser.M2.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};
 			name = Debug;
 		};
@@ -244,7 +181,6 @@
 				INFOPLIST_FILE = M2/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -253,12 +189,15 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 12.0f;
 				PRODUCT_BUNDLE_IDENTIFIER = com.loser.M2;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.loser.M2.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};
 			name = Release;
 		};
@@ -314,8 +253,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				"IPHONEOS_DEPLOYMENT_TARGET[sdk=iphone*]" = 18.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -369,62 +310,14 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				"IPHONEOS_DEPLOYMENT_TARGET[sdk=iphone*]" = 18.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		A1B2C3DD2F500001002ADCB9 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2H42TALVGM;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = M2LiveActivityExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.loser.M2.LiveActivityExtension;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		A1B2C3DE2F500001002ADCB9 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2H42TALVGM;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = M2LiveActivityExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.loser.M2.LiveActivityExtension;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -445,15 +338,6 @@
 			buildConfigurations = (
 				91322FD22F4A7F94002ADCB9 /* Debug */,
 				91322FD32F4A7F94002ADCB9 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		A1B2C3DC2F500001002ADCB9 /* Build configuration list for PBXNativeTarget "M2LiveActivityExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A1B2C3DD2F500001002ADCB9 /* Debug */,
-				A1B2C3DE2F500001002ADCB9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
