@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+.derivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+*.xcuserstate
+**/xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# Dependency managers
+Pods/
+Carthage/Build/
+
+# Editors
+.idea/
+.vscode/
