@@ -1,0 +1,2 @@
+Target dependency graph (1 target)
+Target 'M2' in project 'M2' (no dependencies)
