@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>M2 Docs</title>
+  <meta name="description" content="M2 documentation hub: user and developer guides.">
+  <link rel="icon" type="image/png" href="app-icon.png">
+  <link rel="apple-touch-icon" href="app-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="M2 docs home">
+      <img class="site-icon" src="app-icon.png" alt="M2 app icon">
+      <span>M2 Docs</span>
+    </a>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="user-guide.html">User Guide</a>
+      <a href="developer-guide.html">Developer Guide</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="hero card">
+      <p class="eyebrow">Documentation Hub</p>
+      <h1>M2 Offline Music Player</h1>
+      <p class="lead">
+        This website contains two focused documents.
+        Use the User Guide for app usage and the Developer Guide for architecture and implementation details.
+      </p>
+    </section>
+
+    <section class="guide-grid">
+      <article class="card guide-card">
+        <h2>User Guide</h2>
+        <p>How to run the app, add music, use playback, playlists, favorites, and sleep timer features.</p>
+        <a class="btn" href="user-guide.html">Open User Guide</a>
+      </article>
+
+      <article class="card guide-card">
+        <h2>Developer Guide</h2>
+        <p>Code architecture, services, data storage, notifications, playback flow, and CI information.</p>
+        <a class="btn" href="developer-guide.html">Open Developer Guide</a>
+      </article>
+    </section>
+
+    <section class="card section">
+      <h2>Quick Start</h2>
+      <ol>
+        <li>Open project in Xcode: `M2.xcodeproj`.</li>
+        <li>Select scheme `M2` and run.</li>
+        <li>Add audio files in Files app: `On My iPhone -> M2 -> M2`.</li>
+      </ol>
+      <div class="command-grid">
+        <div class="command-box">
+          <p>Open project</p>
+          <code>open M2.xcodeproj</code>
+          <button class="copy-btn" data-copy="open M2.xcodeproj">Copy</button>
+        </div>
+        <div class="command-box">
+          <p>CLI build (simulator)</p>
+          <code>xcodebuild -project "M2.xcodeproj" -scheme "M2" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build</code>
+          <button class="copy-btn" data-copy="xcodebuild -project \"M2.xcodeproj\" -scheme \"M2\" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build">Copy</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Created from the repository source code.</p>
+    <p id="generated-at"></p>
+  </footer>
+</body>
+</html>
