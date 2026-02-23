@@ -217,6 +217,9 @@ static CGFloat M2SearchPullDistance(UIScrollView *scrollView) {
     return MAX(0.0, topEdge - scrollView.contentOffset.y);
 }
 
+static CGFloat const M2SearchRevealThreshold = 62.0;
+static CGFloat const M2SearchDismissThreshold = 40.0;
+
 static BOOL M2ShouldAttachSearchController(BOOL currentlyAttached,
                                            UISearchController *searchController,
                                            UIScrollView *scrollView,
@@ -232,12 +235,43 @@ static BOOL M2ShouldAttachSearchController(BOOL currentlyAttached,
         }
 
         CGFloat topEdge = -scrollView.adjustedContentInset.top;
-        BOOL scrolledIntoContent = (scrollView.contentOffset.y > topEdge + 24.0);
+        BOOL scrolledIntoContent = (scrollView.contentOffset.y > topEdge + M2SearchDismissThreshold);
         return !scrolledIntoContent;
     }
 
     CGFloat pullDistance = M2SearchPullDistance(scrollView);
     return (pullDistance >= revealThreshold);
+}
+
+static void M2ApplySearchControllerAttachment(UINavigationItem *navigationItem,
+                                              UINavigationBar *navigationBar,
+                                              UISearchController *searchController,
+                                              BOOL shouldAttach,
+                                              BOOL animated) {
+    if (navigationItem == nil) {
+        return;
+    }
+
+    UISearchController *targetController = shouldAttach ? searchController : nil;
+    if (navigationItem.searchController == targetController) {
+        return;
+    }
+
+    if (animated && navigationBar != nil) {
+        [UIView transitionWithView:navigationBar
+                          duration:0.20
+                           options:(UIViewAnimationOptionTransitionCrossDissolve |
+                                    UIViewAnimationOptionAllowUserInteraction |
+                                    UIViewAnimationOptionBeginFromCurrentState)
+                        animations:^{
+            navigationItem.searchController = targetController;
+            [navigationBar layoutIfNeeded];
+        }
+                        completion:nil];
+        return;
+    }
+
+    navigationItem.searchController = targetController;
 }
 
 static void M2PresentQuickAddTrackToPlaylist(UIViewController *controller,
@@ -616,13 +650,17 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
-                                                       76.0);
+                                                       M2SearchRevealThreshold);
     if (shouldAttach == self.searchControllerAttached) {
         return;
     }
 
     self.searchControllerAttached = shouldAttach;
-    self.navigationItem.searchController = shouldAttach ? self.searchController : nil;
+    M2ApplySearchControllerAttachment(self.navigationItem,
+                                      self.navigationController.navigationBar,
+                                      self.searchController,
+                                      shouldAttach,
+                                      (self.view.window != nil));
 }
 
 - (void)applySearchFilterAndReload {
@@ -673,7 +711,11 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
 
     if (!self.searchControllerAttached) {
         self.searchControllerAttached = YES;
-        self.navigationItem.searchController = self.searchController;
+        M2ApplySearchControllerAttachment(self.navigationItem,
+                                          self.navigationController.navigationBar,
+                                          self.searchController,
+                                          YES,
+                                          (self.view.window != nil));
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -940,13 +982,17 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
-                                                       76.0);
+                                                       M2SearchRevealThreshold);
     if (shouldAttach == self.searchControllerAttached) {
         return;
     }
 
     self.searchControllerAttached = shouldAttach;
-    self.navigationItem.searchController = shouldAttach ? self.searchController : nil;
+    M2ApplySearchControllerAttachment(self.navigationItem,
+                                      self.navigationController.navigationBar,
+                                      self.searchController,
+                                      shouldAttach,
+                                      (self.view.window != nil));
 }
 
 - (void)applySearchFilterAndReload {
@@ -999,44 +1045,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     [M2TrackAnalyticsStore.sharedStore analyticsByTrackIDForTrackIDs:trackIDs];
     M2FavoritesStore *favoritesStore = M2FavoritesStore.sharedStore;
 
-    double (^confidenceForActivity)(NSInteger) = ^double(NSInteger activity) {
-        if (activity <= 0) {
-            return 0.0;
-        }
-        double normalized = log1p((double)activity) / log1p(8.0);
-        return MIN(MAX(normalized, 0.0), 1.0);
-    };
-
-    double (^effectiveLovelyScoreForMetrics)(NSInteger, NSInteger, double, BOOL) =
-    ^double(NSInteger playCount, NSInteger skipCount, double score, BOOL isFavorite) {
-        NSInteger activity = playCount + skipCount;
-        double loyalty = (playCount + skipCount) > 0
-        ? ((double)playCount / (double)(playCount + skipCount))
-        : 0.0;
-        double confidence = confidenceForActivity(activity);
-
-        // Blend completion score with behavior confidence and skip pressure.
-        double effective = (score * 0.68) + (loyalty * 0.25) + (confidence * 0.07);
-        if (isFavorite) {
-            effective += 0.05;
-        }
-        if (skipCount > playCount) {
-            effective -= MIN(0.05 * (double)(skipCount - playCount), 0.18);
-        }
-        return MIN(MAX(effective, 0.0), 1.0);
-    };
-
-    double (^minimumLovelyScoreForActivity)(NSInteger, BOOL) =
-    ^double(NSInteger activity, BOOL isFavorite) {
-        if (activity <= 1) {
-            return isFavorite ? 0.54 : 0.58;
-        }
-        if (activity <= 3) {
-            return isFavorite ? 0.50 : 0.53;
-        }
-        return isFavorite ? 0.48 : 0.51;
-    };
-
     NSMutableArray<M2Track *> *eligibleTracks = [NSMutableArray array];
     for (M2Track *track in libraryTracks) {
         NSDictionary<NSString *, NSNumber *> *metrics = analyticsByTrackID[track.identifier] ?: @{};
@@ -1046,27 +1054,13 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         NSInteger activity = playCount + skipCount;
         BOOL isFavorite = [favoritesStore isTrackFavoriteByID:track.identifier];
 
-        if (isFavorite && activity == 0) {
-            [eligibleTracks addObject:track];
-            continue;
-        }
-
-        if (score <= 0.0 || playCount <= 0) {
-            if (!isFavorite) {
-                continue;
-            }
-        }
-        if (activity >= 4 && skipCount >= (playCount * 2)) {
-            continue;
-        }
-        if (!isFavorite && activity >= 5 && score < 0.30) {
-            continue;
-        }
-
-        double effectiveScore = effectiveLovelyScoreForMetrics(playCount, skipCount, score, isFavorite);
-        double minimumScore = minimumLovelyScoreForActivity(activity, isFavorite);
-
-        if (effectiveScore < minimumScore) {
+        // Rule:
+        // (playCount + skipCount) >= 3
+        // AND ((isFavorite && score >= 0.60 && playCount >= 2) || (score >= 0.80 && playCount >= 4))
+        // AND skipCount <= 3
+        BOOL matchesFavoriteRule = (isFavorite && score >= 0.60 && playCount >= 2);
+        BOOL matchesHighScoreRule = (score >= 0.80 && playCount >= 4);
+        if (activity < 3 || skipCount > 3 || !(matchesFavoriteRule || matchesHighScoreRule)) {
             continue;
         }
 
@@ -1091,15 +1085,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         BOOL leftFavorite = [favoritesStore isTrackFavoriteByID:left.identifier];
         BOOL rightFavorite = [favoritesStore isTrackFavoriteByID:right.identifier];
 
-        double leftEffective = effectiveLovelyScoreForMetrics(leftPlay, leftSkip, leftScore, leftFavorite);
-        double rightEffective = effectiveLovelyScoreForMetrics(rightPlay, rightSkip, rightScore, rightFavorite);
-
-        if (leftEffective > rightEffective) {
-            return NSOrderedAscending;
-        }
-        if (leftEffective < rightEffective) {
-            return NSOrderedDescending;
-        }
         if (leftScore > rightScore) {
             return NSOrderedAscending;
         }
@@ -1111,6 +1096,15 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         }
         if (leftPlay < rightPlay) {
             return NSOrderedDescending;
+        }
+        if (leftSkip < rightSkip) {
+            return NSOrderedAscending;
+        }
+        if (leftSkip > rightSkip) {
+            return NSOrderedDescending;
+        }
+        if (leftFavorite != rightFavorite) {
+            return leftFavorite ? NSOrderedAscending : NSOrderedDescending;
         }
 
         NSString *leftTitle = left.title.length > 0 ? left.title : left.fileName;
@@ -1375,13 +1369,17 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
-                                                       76.0);
+                                                       M2SearchRevealThreshold);
     if (shouldAttach == self.searchControllerAttached) {
         return;
     }
 
     self.searchControllerAttached = shouldAttach;
-    self.navigationItem.searchController = shouldAttach ? self.searchController : nil;
+    M2ApplySearchControllerAttachment(self.navigationItem,
+                                      self.navigationController.navigationBar,
+                                      self.searchController,
+                                      shouldAttach,
+                                      (self.view.window != nil));
 }
 
 - (void)applySearchFilterAndReload {
@@ -1441,7 +1439,11 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
     if (!self.searchControllerAttached) {
         self.searchControllerAttached = YES;
-        self.navigationItem.searchController = self.searchController;
+        M2ApplySearchControllerAttachment(self.navigationItem,
+                                          self.navigationController.navigationBar,
+                                          self.searchController,
+                                          YES,
+                                          (self.view.window != nil));
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -1865,13 +1867,17 @@ replacementString:(NSString *)string {
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
-                                                       76.0);
+                                                       M2SearchRevealThreshold);
     if (shouldAttach == self.searchControllerAttached) {
         return;
     }
 
     self.searchControllerAttached = shouldAttach;
-    self.navigationItem.searchController = shouldAttach ? self.searchController : nil;
+    M2ApplySearchControllerAttachment(self.navigationItem,
+                                      self.navigationController.navigationBar,
+                                      self.searchController,
+                                      shouldAttach,
+                                      (self.view.window != nil));
 }
 
 - (void)applySearchFilterAndReload {
@@ -2463,13 +2469,17 @@ replacementString:(NSString *)string {
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
-                                                       76.0);
+                                                       M2SearchRevealThreshold);
     if (shouldAttach == self.searchControllerAttached) {
         return;
     }
 
     self.searchControllerAttached = shouldAttach;
-    self.navigationItem.searchController = shouldAttach ? self.searchController : nil;
+    M2ApplySearchControllerAttachment(self.navigationItem,
+                                      self.navigationController.navigationBar,
+                                      self.searchController,
+                                      shouldAttach,
+                                      (self.view.window != nil));
 }
 
 - (void)applySearchFilterAndReload {
@@ -2636,20 +2646,37 @@ replacementString:(NSString *)string {
         NSString *lovelyID = [NSUserDefaults.standardUserDefaults stringForKey:M2LovelyPlaylistDefaultsKey];
         BOOL isLovely = ((lovelyID.length > 0 && [self.playlist.playlistID isEqualToString:lovelyID]) ||
                          [self.playlist.name localizedCaseInsensitiveCompare:@"Lovely songs"] == NSOrderedSame);
+        UIColor *targetColor = nil;
         if (isLovely) {
-            self.playButton.backgroundColor = M2LovelyAccentRedColor();
+            targetColor = M2LovelyAccentRedColor();
         } else {
             UIImage *accentSource = cover;
-            for (M2Track *track in self.tracks) {
-                if (track.artwork != nil) {
-                    accentSource = track.artwork;
-                    break;
+            if (accentSource == nil || accentSource.CGImage == nil) {
+                for (M2Track *track in self.tracks) {
+                    if (track.artwork != nil) {
+                        accentSource = track.artwork;
+                        break;
+                    }
                 }
             }
 
-            UIColor *accent = [M2ArtworkAccentColorService dominantAccentColorForImage:accentSource
-                                                                               fallback:M2AccentYellowColor()];
-            self.playButton.backgroundColor = accent;
+            targetColor = [M2ArtworkAccentColorService dominantAccentColorForImage:accentSource
+                                                                           fallback:M2AccentYellowColor()];
+        }
+        if (targetColor == nil) {
+            targetColor = M2AccentYellowColor();
+        }
+
+        UIColor *currentColor = self.playButton.backgroundColor;
+        if (currentColor == nil || !CGColorEqualToColor(currentColor.CGColor, targetColor.CGColor)) {
+            [UIView animateWithDuration:0.22
+                                  delay:0.0
+                                options:(UIViewAnimationOptionAllowUserInteraction |
+                                         UIViewAnimationOptionBeginFromCurrentState)
+                             animations:^{
+                self.playButton.backgroundColor = targetColor;
+            }
+                             completion:nil];
         }
     }
 }

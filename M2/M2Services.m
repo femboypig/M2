@@ -133,13 +133,28 @@ static UIColor *M2AverageColorFromImage(UIImage *image) {
                            alpha:1.0];
 }
 
+enum {
+    M2AccentHueBinCount = 36,
+    M2AccentSaturationBinCount = 5,
+    M2AccentBrightnessBinCount = 4
+};
+
+typedef struct {
+    CGFloat weight;
+    CGFloat red;
+    CGFloat green;
+    CGFloat blue;
+    CGFloat saturation;
+    CGFloat brightness;
+} M2AccentHistogramBin;
+
 static UIColor *M2VibrantColorFromImage(UIImage *image) {
     if (image == nil || image.CGImage == nil) {
         return nil;
     }
 
-    const size_t width = 28;
-    const size_t height = 28;
+    const size_t width = 40;
+    const size_t height = 40;
     const size_t bytesPerRow = width * 4;
     uint8_t *pixels = calloc(height, bytesPerRow);
     if (pixels == NULL) {
@@ -169,14 +184,17 @@ static UIColor *M2VibrantColorFromImage(UIImage *image) {
     CGContextSetInterpolationQuality(bitmapContext, kCGInterpolationHigh);
     CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, width, height), image.CGImage);
 
+    M2AccentHistogramBin bins[M2AccentHueBinCount * M2AccentSaturationBinCount * M2AccentBrightnessBinCount] = {0};
+    static const CGFloat kCenterMaxDistance = 0.70710678;
+
     CGFloat bestScore = -1.0;
-    UIColor *bestColor = nil;
+    NSUInteger bestBinIndex = NSNotFound;
 
     for (size_t y = 0; y < height; y += 1) {
         for (size_t x = 0; x < width; x += 1) {
             size_t offset = y * bytesPerRow + x * 4;
             CGFloat alpha = ((CGFloat)pixels[offset + 3]) / 255.0;
-            if (alpha < 0.12) {
+            if (alpha < 0.14) {
                 continue;
             }
 
@@ -193,21 +211,55 @@ static UIColor *M2VibrantColorFromImage(UIImage *image) {
                 continue;
             }
 
-            if (saturation < 0.10 || brightness < 0.14) {
+            if (saturation < 0.12 || brightness < 0.16 || brightness > 0.98) {
                 continue;
             }
 
-            CGFloat score = saturation * (0.55 + brightness * 0.45);
+            NSUInteger hueIndex = MIN((NSUInteger)floor(hue * (CGFloat)M2AccentHueBinCount), (NSUInteger)(M2AccentHueBinCount - 1));
+            NSUInteger saturationIndex = MIN((NSUInteger)floor(saturation * (CGFloat)M2AccentSaturationBinCount), (NSUInteger)(M2AccentSaturationBinCount - 1));
+            NSUInteger brightnessIndex = MIN((NSUInteger)floor(brightness * (CGFloat)M2AccentBrightnessBinCount), (NSUInteger)(M2AccentBrightnessBinCount - 1));
+            NSUInteger binIndex = (hueIndex * M2AccentSaturationBinCount * M2AccentBrightnessBinCount) +
+            (saturationIndex * M2AccentBrightnessBinCount) +
+            brightnessIndex;
+
+            CGFloat normalizedX = (((CGFloat)x) + 0.5) / ((CGFloat)width);
+            CGFloat normalizedY = (((CGFloat)y) + 0.5) / ((CGFloat)height);
+            CGFloat distance = hypot(normalizedX - 0.5, normalizedY - 0.5) / kCenterMaxDistance;
+            distance = MIN(MAX(distance, 0.0), 1.0);
+            CGFloat centerBias = 1.0 - (distance * 0.32);
+            CGFloat weight = alpha * (0.34 + saturation * 0.66) * (0.42 + brightness * 0.58) * centerBias;
+
+            bins[binIndex].weight += weight;
+            bins[binIndex].red += red * weight;
+            bins[binIndex].green += green * weight;
+            bins[binIndex].blue += blue * weight;
+            bins[binIndex].saturation += saturation * weight;
+            bins[binIndex].brightness += brightness * weight;
+
+            CGFloat averageSaturation = bins[binIndex].saturation / bins[binIndex].weight;
+            CGFloat averageBrightness = bins[binIndex].brightness / bins[binIndex].weight;
+            CGFloat score = bins[binIndex].weight *
+            (0.55 + averageSaturation * 0.45) *
+            (0.46 + averageBrightness * 0.54);
             if (score > bestScore) {
                 bestScore = score;
-                bestColor = candidate;
+                bestBinIndex = binIndex;
             }
         }
     }
 
     CGContextRelease(bitmapContext);
     free(pixels);
-    return bestColor;
+
+    if (bestBinIndex == NSNotFound || bins[bestBinIndex].weight <= 0.0) {
+        return nil;
+    }
+
+    M2AccentHistogramBin bestBin = bins[bestBinIndex];
+    return [UIColor colorWithRed:(bestBin.red / bestBin.weight)
+                           green:(bestBin.green / bestBin.weight)
+                            blue:(bestBin.blue / bestBin.weight)
+                           alpha:1.0];
 }
 
 static UIColor *M2NormalizedAccentColor(UIColor *rawColor, CGFloat minimumSaturation) {
@@ -232,6 +284,43 @@ static UIColor *M2NormalizedAccentColor(UIColor *rawColor, CGFloat minimumSatura
     return [UIColor colorWithHue:hue saturation:saturation brightness:brightness alpha:1.0];
 }
 
+static UIColor *M2BlendedAccentColor(UIColor *primaryColor, UIColor *secondaryColor, CGFloat secondaryWeight) {
+    if (primaryColor == nil) {
+        return secondaryColor;
+    }
+    if (secondaryColor == nil) {
+        return primaryColor;
+    }
+
+    CGFloat primaryRed = 0.0;
+    CGFloat primaryGreen = 0.0;
+    CGFloat primaryBlue = 0.0;
+    CGFloat primaryAlpha = 1.0;
+    CGFloat secondaryRed = 0.0;
+    CGFloat secondaryGreen = 0.0;
+    CGFloat secondaryBlue = 0.0;
+    CGFloat secondaryAlpha = 1.0;
+
+    BOOL hasPrimaryRGB = [primaryColor getRed:&primaryRed
+                                        green:&primaryGreen
+                                         blue:&primaryBlue
+                                        alpha:&primaryAlpha];
+    BOOL hasSecondaryRGB = [secondaryColor getRed:&secondaryRed
+                                            green:&secondaryGreen
+                                             blue:&secondaryBlue
+                                            alpha:&secondaryAlpha];
+    if (!hasPrimaryRGB || !hasSecondaryRGB) {
+        return primaryColor;
+    }
+
+    CGFloat clampedWeight = MIN(MAX(secondaryWeight, 0.0), 1.0);
+    CGFloat primaryWeight = 1.0 - clampedWeight;
+    return [UIColor colorWithRed:(primaryRed * primaryWeight + secondaryRed * clampedWeight)
+                           green:(primaryGreen * primaryWeight + secondaryGreen * clampedWeight)
+                            blue:(primaryBlue * primaryWeight + secondaryBlue * clampedWeight)
+                           alpha:1.0];
+}
+
 @implementation M2ArtworkAccentColorService
 
 + (UIColor *)dominantAccentColorForImage:(nullable UIImage *)image
@@ -241,12 +330,17 @@ static UIColor *M2NormalizedAccentColor(UIColor *rawColor, CGFloat minimumSatura
         return fallback;
     }
 
-    UIColor *vibrantColor = M2NormalizedAccentColor(M2VibrantColorFromImage(image), 0.08);
+    UIColor *vibrantColor = M2NormalizedAccentColor(M2VibrantColorFromImage(image), 0.10);
+    UIColor *averageColor = M2NormalizedAccentColor(M2AverageColorFromImage(image), 0.06);
+
+    if (vibrantColor != nil && averageColor != nil) {
+        return M2BlendedAccentColor(vibrantColor, averageColor, 0.20);
+    }
+
     if (vibrantColor != nil) {
         return vibrantColor;
     }
 
-    UIColor *averageColor = M2NormalizedAccentColor(M2AverageColorFromImage(image), 0.05);
     if (averageColor != nil) {
         return averageColor;
     }
