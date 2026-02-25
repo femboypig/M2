@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>M2 Docs</title>
-  <meta name="description" content="M2 documentation hub: user and developer guides.">
+  <title>M2 Engineering Docs</title>
+  <meta name="description" content="Full engineering documentation for M2.">
   <link rel="icon" type="image/png" href="app-icon.png">
   <link rel="apple-touch-icon" href="app-icon.png">
   <link rel="stylesheet" href="styles.css">
@@ -14,62 +14,59 @@
   <header class="topbar">
     <a class="brand" href="index.html" aria-label="M2 docs home">
       <img class="site-icon" src="app-icon.png" alt="M2 app icon">
-      <span>M2 Docs</span>
+      <span>M2 Engineering Docs</span>
     </a>
-    <nav class="top-nav" aria-label="Primary">
-      <a href="user-guide.html">User Guide</a>
-      <a href="developer-guide.html">Developer Guide</a>
+    <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="top-nav" data-site-nav aria-label="Primary">
+      <a href="index.html" data-nav="index.html">Home</a>
+      <a href="architecture.html" data-nav="architecture.html">Architecture</a>
+      <a href="desktop-catalyst.html" data-nav="desktop-catalyst.html">Desktop Catalyst</a>
+      <a href="services-data.html" data-nav="services-data.html">Services & Data</a>
+      <a href="build-ci.html" data-nav="build-ci.html">Build & CI</a>
     </nav>
   </header>
 
   <main class="container">
-    <section class="hero card">
-      <p class="eyebrow">Documentation Hub</p>
-      <h1>M2 Offline Music Player</h1>
-      <p class="lead">
-        This website contains two focused documents.
-        Use the User Guide for app usage and the Developer Guide for architecture and implementation details.
-      </p>
+    <section class="card section">
+      <p class="eyebrow">Home</p>
+      <h1>M2 Documentation</h1>
+      <p>Complete technical documentation for the M2 offline music player.</p>
     </section>
 
-    <section class="guide-grid">
-      <article class="card guide-card">
-        <h2>User Guide</h2>
-        <p>How to run the app, add music, use playback, playlists, favorites, and sleep timer features.</p>
-        <a class="btn" href="user-guide.html">Open User Guide</a>
-      </article>
-
-      <article class="card guide-card">
-        <h2>Developer Guide</h2>
-        <p>Code architecture, services, data storage, notifications, playback flow, and CI information.</p>
-        <a class="btn" href="developer-guide.html">Open Developer Guide</a>
-      </article>
+    <section class="card section">
+      <h2>Pages</h2>
+      <ul>
+        <li><a class="text-link" href="architecture.html">Architecture</a>: boot flow, module boundaries, runtime contracts.</li>
+        <li><a class="text-link" href="desktop-catalyst.html">Desktop Catalyst</a>: sidebar shell, playlists hub, hover actions, pinning, favorites layout.</li>
+        <li><a class="text-link" href="services-data.html">Services & Data</a>: service responsibilities, storage keys, cache behavior.</li>
+        <li><a class="text-link" href="build-ci.html">Build & CI</a>: local builds, CI jobs, troubleshooting, release checklist.</li>
+      </ul>
     </section>
 
     <section class="card section">
       <h2>Quick Start</h2>
-      <ol>
-        <li>Open project in Xcode: `M2.xcodeproj`.</li>
-        <li>Select scheme `M2` and run.</li>
-        <li>Add audio files in Files app: `On My iPhone -> M2 -> M2`.</li>
-      </ol>
       <div class="command-grid">
-        <div class="command-box">
+        <article class="command-box">
           <p>Open project</p>
           <code>open M2.xcodeproj</code>
           <button class="copy-btn" data-copy="open M2.xcodeproj">Copy</button>
-        </div>
-        <div class="command-box">
-          <p>CLI build (simulator)</p>
+        </article>
+        <article class="command-box">
+          <p>Build for iOS Simulator</p>
           <code>xcodebuild -project "M2.xcodeproj" -scheme "M2" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build</code>
           <button class="copy-btn" data-copy="xcodebuild -project \"M2.xcodeproj\" -scheme \"M2\" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build">Copy</button>
-        </div>
+        </article>
+        <article class="command-box">
+          <p>Build for Mac Catalyst</p>
+          <code>xcodebuild -project "M2.xcodeproj" -scheme "M2" -configuration Debug -destination "platform=macOS,variant=Mac Catalyst" -derivedDataPath .derivedData build CODE_SIGNING_ALLOWED=NO</code>
+          <button class="copy-btn" data-copy="xcodebuild -project \"M2.xcodeproj\" -scheme \"M2\" -configuration Debug -destination \"platform=macOS,variant=Mac Catalyst\" -derivedDataPath .derivedData build CODE_SIGNING_ALLOWED=NO">Copy</button>
+        </article>
       </div>
     </section>
   </main>
 
   <footer class="footer">
-    <p>Created from the repository source code.</p>
+    <p>M2 engineering documentation.</p>
     <p id="generated-at"></p>
   </footer>
 </body>
