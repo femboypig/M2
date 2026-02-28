@@ -10,11 +10,10 @@
 #import "AppDelegate.h"
 #import "ViewController.h"
 #import "M2Services.h"
-#import <TargetConditionals.h>
+#import "M2WidgetBridge.h"
 
 typedef void (^M2BootReadyHandler)(void);
 static const NSTimeInterval kM2BootMinimumDuration = 0.35;
-static const NSTimeInterval kM2BootMaximumWaitDuration = 1.2;
 
 static UIColor *M2BootBackgroundColor(void) {
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
@@ -46,24 +45,10 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
 @property (nonatomic, copy) M2BootReadyHandler readyHandler;
 @property (nonatomic, assign) BOOL didStartPreload;
 @property (nonatomic, assign) CFTimeInterval bootStartTime;
-@property (nonatomic, assign) BOOL didCompleteBoot;
 
 @end
 
 @implementation M2BootViewController
-
-- (void)completeBootIfNeeded {
-    if (self.didCompleteBoot) {
-        return;
-    }
-
-    self.didCompleteBoot = YES;
-    M2BootReadyHandler handler = self.readyHandler;
-    self.readyHandler = nil;
-    if (handler != nil) {
-        handler();
-    }
-}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -94,12 +79,6 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
     }
     self.didStartPreload = YES;
     self.bootStartTime = CFAbsoluteTimeGetCurrent();
-    self.didCompleteBoot = NO;
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kM2BootMaximumWaitDuration * (NSTimeInterval)NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        [self completeBootIfNeeded];
-    });
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @autoreleasepool {
@@ -131,6 +110,7 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
             }
 
             (void)M2PlaybackManager.sharedManager;
+            [M2WidgetBridge refreshSharedLovelyTracks];
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -138,7 +118,11 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
             NSTimeInterval remaining = MAX(0.0, kM2BootMinimumDuration - elapsed);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * (NSTimeInterval)NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
-                [self completeBootIfNeeded];
+                M2BootReadyHandler handler = self.readyHandler;
+                self.readyHandler = nil;
+                if (handler != nil) {
+                    handler();
+                }
             });
         });
     });
@@ -148,99 +132,51 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
 
 @interface SceneDelegate ()
 
-@property (nonatomic, assign) BOOL didAdjustMacTrafficLights;
+@property (nonatomic, strong, nullable) NSURL *pendingWidgetURL;
+@property (nonatomic, assign) BOOL didFinishBootTransition;
 
 @end
 
 @implementation SceneDelegate
 
-#if TARGET_OS_MACCATALYST
-- (void)adjustMacTrafficLightsIfNeeded {
-    if (self.didAdjustMacTrafficLights || self.window == nil) {
+- (void)handleIncomingURL:(NSURL *)url deferIfNeeded:(BOOL)deferIfNeeded {
+    if (![url isKindOfClass:NSURL.class]) {
         return;
     }
 
-    id nsWindow = nil;
-    @try {
-        nsWindow = [self.window valueForKey:@"nsWindow"];
-    } @catch (__unused NSException *exception) {
+    if (deferIfNeeded && !self.didFinishBootTransition) {
+        self.pendingWidgetURL = url;
         return;
     }
 
-    if (nsWindow == nil) {
-        return;
+    BOOL handled = [M2WidgetBridge handleWidgetDeepLinkURL:url];
+    if (handled) {
+        self.pendingWidgetURL = nil;
     }
-
-    SEL standardWindowButtonSelector = NSSelectorFromString(@"standardWindowButton:");
-    if (![nsWindow respondsToSelector:standardWindowButtonSelector]) {
-        return;
-    }
-
-    // NSWindow close/minimize/zoom button indices.
-    NSArray<NSNumber *> *buttonTypes = @[@0, @1, @2];
-    NSMethodSignature *signature = [nsWindow methodSignatureForSelector:standardWindowButtonSelector];
-    if (signature == nil) {
-        return;
-    }
-
-    for (NSNumber *buttonType in buttonTypes) {
-        NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-        invocation.target = nsWindow;
-        invocation.selector = standardWindowButtonSelector;
-        NSInteger type = buttonType.integerValue;
-        [invocation setArgument:&type atIndex:2];
-        [invocation invoke];
-
-        __unsafe_unretained id button = nil;
-        [invocation getReturnValue:&button];
-        if (button == nil) {
-            continue;
-        }
-
-        NSValue *frameValue = nil;
-        @try {
-            frameValue = [button valueForKey:@"frame"];
-        } @catch (__unused NSException *exception) {
-            continue;
-        }
-        if (![frameValue isKindOfClass:NSValue.class]) {
-            continue;
-        }
-
-        CGRect frame = frameValue.CGRectValue;
-        frame.origin.x += 2.0;
-        frame.origin.y -= 2.0;
-
-        @try {
-            [button setValue:[NSValue valueWithCGRect:frame] forKey:@"frame"];
-        } @catch (__unused NSException *exception) {
-            continue;
-        }
-    }
-
-    self.didAdjustMacTrafficLights = YES;
 }
-#endif
+
+- (void)processPendingWidgetURLIfNeeded {
+    NSURL *pendingURL = self.pendingWidgetURL;
+    self.pendingWidgetURL = nil;
+    if (pendingURL == nil) {
+        return;
+    }
+
+    [self handleIncomingURL:pendingURL deferIfNeeded:NO];
+}
 
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
     (void)session;
-    (void)connectionOptions;
+    UIOpenURLContext *openURLContext = connectionOptions.URLContexts.allObjects.firstObject;
+    if ([openURLContext isKindOfClass:UIOpenURLContext.class]) {
+        self.pendingWidgetURL = openURLContext.URL;
+    }
 
     if (![scene isKindOfClass:UIWindowScene.class]) {
         return;
     }
 
     UIWindowScene *windowScene = (UIWindowScene *)scene;
-#if TARGET_OS_MACCATALYST
-    UISceneSizeRestrictions *sizeRestrictions = windowScene.sizeRestrictions;
-    if (sizeRestrictions != nil) {
-        sizeRestrictions.minimumSize = CGSizeMake(980.0, 640.0);
-    }
-    if (@available(iOS 15.0, *)) {
-        windowScene.titlebar.titleVisibility = UITitlebarTitleVisibilityHidden;
-        windowScene.titlebar.toolbar = nil;
-    }
-#endif
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     M2BootViewController *bootViewController = [[M2BootViewController alloc] init];
 
@@ -258,19 +194,13 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
                         animations:^{
             strongSelf.window.rootViewController = mainController;
         } completion:^(__unused BOOL finished) {
-#if TARGET_OS_MACCATALYST
-            [strongSelf adjustMacTrafficLightsIfNeeded];
-#endif
+            strongSelf.didFinishBootTransition = YES;
+            [strongSelf processPendingWidgetURLIfNeeded];
         }];
     };
 
     self.window.rootViewController = bootViewController;
     [self.window makeKeyAndVisible];
-#if TARGET_OS_MACCATALYST
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self adjustMacTrafficLightsIfNeeded];
-    });
-#endif
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
@@ -279,9 +209,6 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {
     (void)scene;
-#if TARGET_OS_MACCATALYST
-    [self adjustMacTrafficLightsIfNeeded];
-#endif
 }
 
 - (void)sceneWillResignActive:(UIScene *)scene {
@@ -290,11 +217,25 @@ static UIImage *M2AppIconImage(UITraitCollection *traitCollection) {
 
 - (void)sceneWillEnterForeground:(UIScene *)scene {
     (void)scene;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * (NSTimeInterval)NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [M2WidgetBridge refreshSharedLovelyTracks];
+    });
 }
 
 - (void)sceneDidEnterBackground:(UIScene *)scene {
     (void)scene;
     [(AppDelegate *)UIApplication.sharedApplication.delegate saveContext];
+}
+
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+    (void)scene;
+    UIOpenURLContext *context = URLContexts.allObjects.firstObject;
+    if (![context isKindOfClass:UIOpenURLContext.class]) {
+        return;
+    }
+
+    [self handleIncomingURL:context.URL deferIfNeeded:YES];
 }
 
 @end

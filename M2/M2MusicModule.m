@@ -7,21 +7,12 @@
 
 #import <math.h>
 #import <PhotosUI/PhotosUI.h>
-#import <TargetConditionals.h>
 
 #import "M2Cells.h"
 #import "M2Services.h"
 
 static UIColor *M2AccentYellowColor(void) {
     return [UIColor colorWithRed:1.0 green:0.83 blue:0.08 alpha:1.0];
-}
-
-static BOOL M2IsMacCatalyst(void) {
-#if TARGET_OS_MACCATALYST
-    return YES;
-#else
-    return NO;
-#endif
 }
 
 static UIColor *M2LovelyAccentRedColor(void) {
@@ -32,30 +23,12 @@ static NSString * const M2LovelyPlaylistDefaultsKey = @"m2_lovely_playlist_id_v1
 static NSString * const M2LovelyPlaylistCoverMarkerKey = @"m2_lovely_playlist_cover_marker_v2";
 
 static UIColor *M2PlayerBackgroundColor(void) {
-    if (M2IsMacCatalyst()) {
-        return [UIColor colorWithRed:0.05 green:0.05 blue:0.06 alpha:1.0];
-    }
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
         if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
             return UIColor.blackColor;
         }
         return UIColor.systemBackgroundColor;
     }];
-}
-
-static UIColor *M2ModulePageBackgroundColor(void) {
-    if (M2IsMacCatalyst()) {
-        return UIColor.blackColor;
-    }
-    return UIColor.systemBackgroundColor;
-}
-
-static UIColor *M2DesktopPanelBackgroundColor(void) {
-    return [UIColor colorWithRed:0.06 green:0.06 blue:0.07 alpha:1.0];
-}
-
-static UIColor *M2DesktopPanelBorderColor(void) {
-    return [UIColor colorWithWhite:1.0 alpha:0.10];
 }
 
 static UIColor *M2PlayerPrimaryColor(void) {
@@ -388,170 +361,6 @@ static UIImage *M2SliderThumbImage(CGFloat diameter, UIColor *color) {
     }];
 }
 
-static void M2ApplyDesktopTableChrome(UITableView *tableView) {
-    if (!M2IsMacCatalyst() || tableView == nil) {
-        return;
-    }
-
-    tableView.backgroundColor = UIColor.clearColor;
-    tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    tableView.rowHeight = MAX(tableView.rowHeight, 58.0);
-    tableView.contentInset = UIEdgeInsetsMake(8.0, 0.0, 14.0, 0.0);
-    tableView.scrollIndicatorInsets = UIEdgeInsetsMake(8.0, 0.0, 14.0, 0.0);
-}
-
-static UIView *M2DesktopHeroChip(NSString *text) {
-    UIView *chip = [[UIView alloc] init];
-    chip.translatesAutoresizingMaskIntoConstraints = NO;
-    chip.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
-    chip.layer.cornerRadius = 11.0;
-    chip.layer.masksToBounds = YES;
-
-    UILabel *label = [[UILabel alloc] init];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.text = text ?: @"";
-    label.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
-    label.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightSemibold];
-
-    [chip addSubview:label];
-    [NSLayoutConstraint activateConstraints:@[
-        [label.leadingAnchor constraintEqualToAnchor:chip.leadingAnchor constant:10.0],
-        [label.trailingAnchor constraintEqualToAnchor:chip.trailingAnchor constant:-10.0],
-        [label.topAnchor constraintEqualToAnchor:chip.topAnchor constant:5.0],
-        [label.bottomAnchor constraintEqualToAnchor:chip.bottomAnchor constant:-5.0]
-    ]];
-    return chip;
-}
-
-static UIView *M2DesktopHeroHeader(CGFloat width,
-                                   NSString *title,
-                                   NSString *subtitle,
-                                   NSString *symbolName,
-                                   UIColor *accentColor) {
-    CGFloat resolvedWidth = MAX(width, 520.0);
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, resolvedWidth, 196.0)];
-    header.backgroundColor = UIColor.clearColor;
-
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectInset(header.bounds, 12.0, 10.0)];
-    panel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    panel.backgroundColor = M2DesktopPanelBackgroundColor();
-    panel.layer.cornerRadius = 22.0;
-    panel.layer.borderWidth = 1.0;
-    panel.layer.borderColor = M2DesktopPanelBorderColor().CGColor;
-    panel.layer.masksToBounds = YES;
-    [header addSubview:panel];
-
-    CAGradientLayer *backgroundGradient = [CAGradientLayer layer];
-    backgroundGradient.frame = panel.bounds;
-    backgroundGradient.needsDisplayOnBoundsChange = YES;
-    backgroundGradient.colors = @[
-        (__bridge id)[UIColor colorWithWhite:0.10 alpha:1.0].CGColor,
-        (__bridge id)[UIColor colorWithWhite:0.05 alpha:1.0].CGColor
-    ];
-    backgroundGradient.startPoint = CGPointMake(0.0, 0.0);
-    backgroundGradient.endPoint = CGPointMake(1.0, 1.0);
-    [panel.layer insertSublayer:backgroundGradient atIndex:0];
-
-    UIView *glow = [[UIView alloc] initWithFrame:CGRectMake(CGRectGetWidth(panel.bounds) - 220.0, -58.0, 270.0, 230.0)];
-    glow.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleBottomMargin;
-    glow.backgroundColor = [(accentColor ?: M2AccentYellowColor()) colorWithAlphaComponent:0.24];
-    glow.layer.cornerRadius = 115.0;
-    glow.layer.masksToBounds = YES;
-    [panel addSubview:glow];
-
-    UIVisualEffectView *glowBlur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
-    glowBlur.frame = glow.bounds;
-    glowBlur.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [glow addSubview:glowBlur];
-
-    UIView *badge = [[UIView alloc] init];
-    badge.translatesAutoresizingMaskIntoConstraints = NO;
-    badge.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
-    badge.layer.cornerRadius = 18.0;
-    badge.layer.masksToBounds = YES;
-
-    UIImageView *symbolView = [[UIImageView alloc] init];
-    symbolView.translatesAutoresizingMaskIntoConstraints = NO;
-    UIImageSymbolConfiguration *symbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:18.0
-                                                                                                weight:UIImageSymbolWeightSemibold];
-    symbolView.image = [UIImage systemImageNamed:(symbolName.length > 0 ? symbolName : @"music.note")
-                               withConfiguration:symbolConfig];
-    symbolView.tintColor = [UIColor colorWithWhite:1.0 alpha:0.92];
-    symbolView.contentMode = UIViewContentModeScaleAspectFit;
-
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.text = title ?: @"";
-    titleLabel.textColor = UIColor.whiteColor;
-    titleLabel.font = M2HeadlineFont(34.0);
-    titleLabel.numberOfLines = 1;
-
-    UILabel *subtitleLabel = [[UILabel alloc] init];
-    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitleLabel.text = subtitle ?: @"";
-    subtitleLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.76];
-    subtitleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
-    subtitleLabel.numberOfLines = 1;
-
-    UIStackView *chips = [[UIStackView alloc] initWithArrangedSubviews:@[
-        M2DesktopHeroChip(@"For You"),
-        M2DesktopHeroChip(@"Trending"),
-        M2DesktopHeroChip(@"Mixes")
-    ]];
-    chips.translatesAutoresizingMaskIntoConstraints = NO;
-    chips.axis = UILayoutConstraintAxisHorizontal;
-    chips.alignment = UIStackViewAlignmentLeading;
-    chips.distribution = UIStackViewDistributionFillProportionally;
-    chips.spacing = 8.0;
-
-    [panel addSubview:badge];
-    [badge addSubview:symbolView];
-    [panel addSubview:titleLabel];
-    [panel addSubview:subtitleLabel];
-    [panel addSubview:chips];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [badge.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:18.0],
-        [badge.topAnchor constraintEqualToAnchor:panel.topAnchor constant:18.0],
-        [badge.widthAnchor constraintEqualToConstant:36.0],
-        [badge.heightAnchor constraintEqualToConstant:36.0],
-
-        [symbolView.centerXAnchor constraintEqualToAnchor:badge.centerXAnchor],
-        [symbolView.centerYAnchor constraintEqualToAnchor:badge.centerYAnchor],
-
-        [titleLabel.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:14.0],
-        [titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:panel.trailingAnchor constant:-18.0],
-        [titleLabel.centerYAnchor constraintEqualToAnchor:badge.centerYAnchor constant:-2.0],
-
-        [subtitleLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
-        [subtitleLabel.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-20.0],
-        [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:3.0],
-
-        [chips.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor],
-        [chips.trailingAnchor constraintLessThanOrEqualToAnchor:panel.trailingAnchor constant:-18.0],
-        [chips.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:16.0]
-    ]];
-
-    return header;
-}
-
-static void M2ApplyDesktopHeroToTable(UITableView *tableView,
-                                      CGFloat width,
-                                      NSString *title,
-                                      NSString *subtitle,
-                                      NSString *symbolName,
-                                      UIColor *accentColor) {
-    if (!M2IsMacCatalyst() || tableView == nil) {
-        return;
-    }
-
-    UIView *header = M2DesktopHeroHeader(width, title, subtitle, symbolName, accentColor);
-    if (tableView.tableHeaderView == nil ||
-        fabs(tableView.tableHeaderView.bounds.size.width - header.bounds.size.width) > 1.0) {
-        tableView.tableHeaderView = header;
-    }
-}
-
 static NSString *M2SleepTimerRemainingString(NSTimeInterval interval) {
     NSInteger totalSeconds = (NSInteger)llround(MAX(0.0, interval));
     NSInteger hours = totalSeconds / 3600;
@@ -760,13 +569,12 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    BOOL desktop = M2IsMacCatalyst();
     self.title = @"Music";
     self.navigationItem.title = nil;
     self.navigationItem.titleView = nil;
-    self.navigationItem.leftBarButtonItem = desktop ? nil : [[UIBarButtonItem alloc] initWithCustomView:M2WhiteSectionTitleLabel(@"Music")];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:M2WhiteSectionTitleLabel(@"Music")];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
     [self setupTableView];
     [self setupSearch];
@@ -779,7 +587,7 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
                                                                     style:UIBarButtonItemStylePlain
                                                                    target:self
                                                                    action:@selector(searchButtonTapped)];
-    self.navigationItem.rightBarButtonItems = desktop ? @[] : @[searchItem, reloadItem];
+    self.navigationItem.rightBarButtonItems = @[searchItem, reloadItem];
 
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(handlePlaybackChanged)
@@ -800,22 +608,8 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:YES animated:animated];
-    }
     [self updateSearchControllerAttachment];
     [self.tableView reloadData];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:NO animated:animated];
-    }
-}
-
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
 }
 
 - (void)setupTableView {
@@ -832,7 +626,6 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
         tableView.sectionHeaderTopPadding = 0.0;
     }
     [tableView registerClass:M2TrackCell.class forCellReuseIdentifier:@"MusicTrackCell"];
-    M2ApplyDesktopTableChrome(tableView);
 
     self.tableView = tableView;
     [self.view addSubview:tableView];
@@ -854,10 +647,6 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
 }
 
 - (void)updateSearchControllerAttachment {
-    if (M2IsMacCatalyst()) {
-        return;
-    }
-
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
@@ -886,70 +675,18 @@ static void M2PresentSleepTimerActionSheet(UIViewController *controller,
         return;
     }
 
+    UILabel *label = [[UILabel alloc] init];
+    label.textColor = UIColor.secondaryLabelColor;
+    label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.numberOfLines = 0;
+
     if (self.tracks.count == 0) {
-        UIView *container = [[UIView alloc] initWithFrame:self.tableView.bounds];
-        container.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-
-        UILabel *label = [[UILabel alloc] init];
-        label.translatesAutoresizingMaskIntoConstraints = NO;
-        label.textColor = UIColor.secondaryLabelColor;
-        label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
-        label.textAlignment = NSTextAlignmentCenter;
-        label.numberOfLines = 0;
-        label.text = [NSString stringWithFormat:@"No music files yet.\n%@",
-                      M2LibraryManager.sharedManager.filesDropHint];
-
-        UIButton *openFolderButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        openFolderButton.translatesAutoresizingMaskIntoConstraints = NO;
-        [openFolderButton setTitle:@"Open Music Folder" forState:UIControlStateNormal];
-        openFolderButton.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
-        [openFolderButton addTarget:self action:@selector(openMusicFolderTapped) forControlEvents:UIControlEventTouchUpInside];
-
-        UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[label, openFolderButton]];
-        stack.translatesAutoresizingMaskIntoConstraints = NO;
-        stack.axis = UILayoutConstraintAxisVertical;
-        stack.alignment = UIStackViewAlignmentCenter;
-        stack.spacing = 10.0;
-
-        [container addSubview:stack];
-        [NSLayoutConstraint activateConstraints:@[
-            [stack.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
-            [stack.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
-            [stack.leadingAnchor constraintGreaterThanOrEqualToAnchor:container.leadingAnchor constant:20.0],
-            [stack.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor constant:-20.0]
-        ]];
-
-        self.tableView.backgroundView = container;
-        return;
+        label.text = @"No music files in On My iPhone/M2/M2";
     } else {
-        UILabel *label = [[UILabel alloc] init];
-        label.textColor = UIColor.secondaryLabelColor;
-        label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
-        label.textAlignment = NSTextAlignmentCenter;
-        label.numberOfLines = 0;
         label.text = @"No search results.";
-        self.tableView.backgroundView = label;
-        return;
     }
-}
-
-- (void)openMusicFolderTapped {
-    __weak typeof(self) weakSelf = self;
-    BOOL started = [M2LibraryManager.sharedManager openMusicDirectoryWithCompletion:^(BOOL success) {
-        if (success) {
-            return;
-        }
-
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf == nil) {
-            return;
-        }
-        M2PresentAlert(strongSelf, @"Unable To Open Folder", @"Could not open the music folder.");
-    }];
-
-    if (!started) {
-        M2PresentAlert(self, @"Unable To Open Folder", @"Could not open the music folder.");
-    }
+    self.tableView.backgroundView = label;
 }
 
 - (void)reloadTracks {
@@ -1137,76 +874,9 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
 #pragma mark - Playlists
 
-@interface M2DesktopPlaylistCardCell : UICollectionViewCell
-
-- (void)configureWithName:(NSString *)name artwork:(UIImage *)artwork;
-
-@end
-
-@implementation M2DesktopPlaylistCardCell {
-    UIImageView *_coverView;
-    UILabel *_nameLabel;
-}
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        [self setupUI];
-    }
-    return self;
-}
-
-- (void)setupUI {
-    self.backgroundColor = UIColor.clearColor;
-    self.contentView.backgroundColor = UIColor.clearColor;
-
-    UIImageView *coverView = [[UIImageView alloc] init];
-    coverView.translatesAutoresizingMaskIntoConstraints = NO;
-    coverView.contentMode = UIViewContentModeScaleAspectFill;
-    coverView.layer.cornerRadius = 14.0;
-    coverView.layer.masksToBounds = YES;
-    _coverView = coverView;
-
-    UILabel *nameLabel = [[UILabel alloc] init];
-    nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    nameLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.96];
-    nameLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
-    nameLabel.numberOfLines = 2;
-    _nameLabel = nameLabel;
-
-    [self.contentView addSubview:coverView];
-    [self.contentView addSubview:nameLabel];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [coverView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:2.0],
-        [coverView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:8.0],
-        [coverView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8.0],
-        [coverView.heightAnchor constraintEqualToAnchor:coverView.widthAnchor],
-
-        [nameLabel.topAnchor constraintEqualToAnchor:coverView.bottomAnchor constant:9.0],
-        [nameLabel.leadingAnchor constraintEqualToAnchor:coverView.leadingAnchor constant:1.0],
-        [nameLabel.trailingAnchor constraintEqualToAnchor:coverView.trailingAnchor constant:-1.0],
-        [nameLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-2.0]
-    ]];
-}
-
-- (void)prepareForReuse {
-    [super prepareForReuse];
-    _coverView.image = nil;
-    _nameLabel.text = @"";
-}
-
-- (void)configureWithName:(NSString *)name artwork:(UIImage *)artwork {
-    _nameLabel.text = name ?: @"Playlist";
-    _coverView.image = artwork;
-}
-
-@end
-
-@interface M2PlaylistsViewController () <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
+@interface M2PlaylistsViewController () <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating>
 
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) UICollectionView *desktopCollectionView;
 @property (nonatomic, copy) NSArray<M2Playlist *> *playlists;
 @property (nonatomic, copy) NSArray<M2Playlist *> *filteredPlaylists;
 @property (nonatomic, copy) NSString *searchQuery;
@@ -1222,30 +892,19 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    BOOL desktop = M2IsMacCatalyst();
     self.title = nil;
     self.navigationItem.title = nil;
     self.navigationItem.titleView = nil;
-    self.navigationItem.leftBarButtonItem = desktop ? nil : [[UIBarButtonItem alloc] initWithCustomView:M2WhiteSectionTitleLabel(@"Playlists")];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:M2WhiteSectionTitleLabel(@"Playlists")];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
-    UIBarButtonItem *addItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
-                                                                               target:self
-                                                                               action:@selector(addPlaylistTapped)];
-    if (desktop) {
-        self.navigationItem.rightBarButtonItems = @[addItem];
-        [self setupDesktopPlaylistsView];
-    } else {
-        [self setupTableView];
-        [self setupSearch];
+    [self setupTableView];
+    [self setupSearch];
 
-        UIBarButtonItem *searchItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
-                                                                        style:UIBarButtonItemStylePlain
-                                                                       target:self
-                                                                       action:@selector(searchButtonTapped)];
-        self.navigationItem.rightBarButtonItems = @[searchItem, addItem];
-    }
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
+                                                                                             target:self
+                                                                                             action:@selector(addPlaylistTapped)];
 
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(reloadPlaylists)
@@ -1279,33 +938,11 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     [super viewWillAppear:animated];
     self.navigationItem.title = nil;
     self.navigationItem.titleView = nil;
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:YES animated:animated];
-    }
     if (self.needsLovelyRefresh) {
         [self reloadPlaylists];
     }
-    if (M2IsMacCatalyst()) {
-        [self.desktopCollectionView reloadData];
-    } else {
-        [self updateSearchControllerAttachment];
-        [self.tableView reloadData];
-    }
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:NO animated:animated];
-    }
-}
-
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    if (M2IsMacCatalyst()) {
-        [self.desktopCollectionView.collectionViewLayout invalidateLayout];
-        return;
-    }
+    [self updateSearchControllerAttachment];
+    [self.tableView reloadData];
 }
 
 - (void)markNeedsLovelyRefresh {
@@ -1326,13 +963,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         tableView.sectionHeaderTopPadding = 0.0;
     }
     [tableView registerClass:M2PlaylistCell.class forCellReuseIdentifier:@"PlaylistCell"];
-    M2ApplyDesktopTableChrome(tableView);
-    M2ApplyDesktopHeroToTable(tableView,
-                              CGRectGetWidth(self.view.bounds),
-                              @"Playlists",
-                              @"Your collections, lovely songs and quick picks.",
-                              @"rectangle.stack.fill",
-                              [UIColor colorWithRed:1.0 green:0.35 blue:0.42 alpha:1.0]);
 
     self.tableView = tableView;
     [self.view addSubview:tableView];
@@ -1342,73 +972,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         [tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
-}
-
-- (void)setupDesktopPlaylistsView {
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.text = @"Мои плейлисты";
-    titleLabel.textColor = UIColor.whiteColor;
-    titleLabel.font = M2HeadlineFont(34.0);
-    titleLabel.numberOfLines = 1;
-
-    UIImage *arrowImage = [UIImage imageNamed:@"PlaylistsArrowSVG"];
-    if (arrowImage == nil) {
-        arrowImage = [UIImage systemImageNamed:@"chevron.right"];
-    }
-    UIImageView *arrowView = [[UIImageView alloc] initWithImage:[arrowImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
-    arrowView.translatesAutoresizingMaskIntoConstraints = NO;
-    arrowView.contentMode = UIViewContentModeScaleAspectFit;
-    arrowView.tintColor = [UIColor colorWithWhite:1.0 alpha:0.84];
-
-    UILabel *sectionLabel = [[UILabel alloc] init];
-    sectionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    sectionLabel.text = @"Созданные плейлисты";
-    sectionLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.78];
-    sectionLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightSemibold];
-
-    UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
-    layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-    layout.minimumInteritemSpacing = 18.0;
-    layout.minimumLineSpacing = 22.0;
-    layout.sectionInset = UIEdgeInsetsMake(0.0, 0.0, 24.0, 0.0);
-
-    UICollectionView *collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
-    collectionView.translatesAutoresizingMaskIntoConstraints = NO;
-    collectionView.backgroundColor = UIColor.clearColor;
-    collectionView.dataSource = self;
-    collectionView.delegate = self;
-    collectionView.alwaysBounceVertical = YES;
-    collectionView.showsVerticalScrollIndicator = YES;
-    collectionView.contentInset = UIEdgeInsetsMake(0.0, 0.0, 20.0, 0.0);
-    collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(0.0, 0.0, 20.0, 0.0);
-    [collectionView registerClass:M2DesktopPlaylistCardCell.class forCellWithReuseIdentifier:@"DesktopPlaylistCardCell"];
-    self.desktopCollectionView = collectionView;
-
-    [self.view addSubview:titleLabel];
-    [self.view addSubview:arrowView];
-    [self.view addSubview:sectionLabel];
-    [self.view addSubview:collectionView];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [titleLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:16.0],
-        [titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24.0],
-
-        [arrowView.leadingAnchor constraintEqualToAnchor:titleLabel.trailingAnchor constant:9.0],
-        [arrowView.centerYAnchor constraintEqualToAnchor:titleLabel.centerYAnchor constant:2.0],
-        [arrowView.widthAnchor constraintEqualToConstant:24.0],
-        [arrowView.heightAnchor constraintEqualToConstant:24.0],
-        [arrowView.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20.0],
-
-        [sectionLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:3.0],
-        [sectionLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
-        [sectionLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-24.0],
-
-        [collectionView.topAnchor constraintEqualToAnchor:sectionLabel.bottomAnchor constant:16.0],
-        [collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24.0],
-        [collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24.0],
-        [collectionView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
 }
 
@@ -1439,32 +1002,19 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
 - (void)applySearchFilterAndReload {
     self.filteredPlaylists = M2FilterPlaylistsByQuery(self.playlists, self.searchQuery);
-    if (M2IsMacCatalyst()) {
-        [self.desktopCollectionView reloadData];
-    } else {
-        [self.tableView reloadData];
-    }
+    [self.tableView reloadData];
     [self updateEmptyState];
 }
 
 - (void)updateEmptyState {
     if (self.filteredPlaylists.count > 0) {
-        if (M2IsMacCatalyst()) {
-            self.desktopCollectionView.backgroundView = nil;
-        } else {
-            self.tableView.backgroundView = nil;
-        }
+        self.tableView.backgroundView = nil;
         return;
     }
 
     UILabel *label = [[UILabel alloc] init];
-    if (M2IsMacCatalyst()) {
-        label.textColor = [UIColor colorWithWhite:1.0 alpha:0.66];
-        label.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightMedium];
-    } else {
-        label.textColor = UIColor.secondaryLabelColor;
-        label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
-    }
+    label.textColor = UIColor.secondaryLabelColor;
+    label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
     label.textAlignment = NSTextAlignmentCenter;
     label.numberOfLines = 0;
     if (self.playlists.count == 0) {
@@ -1472,11 +1022,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     } else {
         label.text = @"No matching playlists.";
     }
-    if (M2IsMacCatalyst()) {
-        self.desktopCollectionView.backgroundView = label;
-    } else {
-        self.tableView.backgroundView = label;
-    }
+    self.tableView.backgroundView = label;
 }
 
 - (void)addPlaylistTapped {
@@ -1679,26 +1225,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     }
 }
 
-- (void)searchButtonTapped {
-    if (self.searchController == nil) {
-        return;
-    }
-
-    if (!self.searchControllerAttached) {
-        self.searchControllerAttached = YES;
-        M2ApplySearchControllerAttachment(self.navigationItem,
-                                          self.navigationController.navigationBar,
-                                          self.searchController,
-                                          YES,
-                                          (self.view.window != nil));
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.searchController.active = YES;
-        [self.searchController.searchBar becomeFirstResponder];
-    });
-}
-
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -1737,68 +1263,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     [self.navigationController pushViewController:detail animated:YES];
 }
 
-#pragma mark - UICollectionViewDataSource
-
-- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    (void)collectionView;
-    (void)section;
-    return self.filteredPlaylists.count;
-}
-
-- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    M2DesktopPlaylistCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"DesktopPlaylistCardCell"
-                                                                                 forIndexPath:indexPath];
-    if (indexPath.item >= self.filteredPlaylists.count) {
-        [cell configureWithName:@"" artwork:nil];
-        return cell;
-    }
-
-    M2Playlist *playlist = self.filteredPlaylists[indexPath.item];
-    UIImage *cover = [M2PlaylistStore.sharedStore coverForPlaylist:playlist
-                                                           library:M2LibraryManager.sharedManager
-                                                              size:CGSizeMake(720.0, 720.0)];
-    [cell configureWithName:playlist.name artwork:cover];
-    return cell;
-}
-
-#pragma mark - UICollectionViewDelegate
-
-- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
-    if (indexPath.item >= self.filteredPlaylists.count) {
-        return;
-    }
-
-    M2Playlist *playlist = self.filteredPlaylists[indexPath.item];
-    M2PlaylistDetailViewController *detail = [[M2PlaylistDetailViewController alloc] initWithPlaylistID:playlist.playlistID];
-    [self.navigationController pushViewController:detail animated:YES];
-}
-
-#pragma mark - UICollectionViewDelegateFlowLayout
-
-- (CGSize)collectionView:(UICollectionView *)collectionView
-                  layout:(UICollectionViewLayout *)collectionViewLayout
-  sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    (void)collectionViewLayout;
-    (void)indexPath;
-
-    CGFloat width = CGRectGetWidth(collectionView.bounds);
-    CGFloat spacing = 18.0;
-    CGFloat desiredItemWidth = 186.0;
-    NSInteger columns = MAX(1, (NSInteger)floor((width + spacing) / (desiredItemWidth + spacing)));
-    columns = MIN(columns, 5);
-    if (width >= 520.0) {
-        columns = MAX(columns, 2);
-    }
-
-    CGFloat totalSpacing = spacing * (CGFloat)(columns - 1);
-    CGFloat itemWidth = floor((width - totalSpacing) / (CGFloat)columns);
-    itemWidth = MAX(itemWidth, 120.0);
-    itemWidth = MIN(itemWidth, 220.0);
-    CGFloat labelAreaHeight = 42.0;
-    return CGSizeMake(itemWidth, itemWidth + labelAreaHeight);
-}
-
 - (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
     self.searchQuery = searchController.searchBar.text ?: @"";
     [self applySearchFilterAndReload];
@@ -1830,21 +1294,16 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    BOOL desktop = M2IsMacCatalyst();
     self.title = @"Favorites";
     self.navigationItem.title = nil;
     self.navigationItem.titleView = nil;
-    self.navigationItem.leftBarButtonItem = desktop ? nil : [[UIBarButtonItem alloc] initWithCustomView:M2WhiteSectionTitleLabel(@"Favorites")];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:M2WhiteSectionTitleLabel(@"Favorites")];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
-    if (!desktop) {
-        self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
-                                                                                   style:UIBarButtonItemStylePlain
-                                                                                  target:self
-                                                                                  action:@selector(searchButtonTapped)];
-    } else {
-        self.navigationItem.rightBarButtonItem = nil;
-    }
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
+                                                                               style:UIBarButtonItemStylePlain
+                                                                              target:self
+                                                                              action:@selector(searchButtonTapped)];
 
     [self setupTableView];
     [self setupSearch];
@@ -1873,22 +1332,8 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:YES animated:animated];
-    }
     [self updateSearchControllerAttachment];
     [self.tableView reloadData];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:NO animated:animated];
-    }
-}
-
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
 }
 
 - (void)setupTableView {
@@ -1905,7 +1350,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         tableView.sectionHeaderTopPadding = 0.0;
     }
     [tableView registerClass:M2TrackCell.class forCellReuseIdentifier:@"FavoriteTrackCell"];
-    M2ApplyDesktopTableChrome(tableView);
 
     self.tableView = tableView;
     [self.view addSubview:tableView];
@@ -1927,10 +1371,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 }
 
 - (void)updateSearchControllerAttachment {
-    if (M2IsMacCatalyst()) {
-        return;
-    }
-
     BOOL shouldAttach = M2ShouldAttachSearchController(self.searchControllerAttached,
                                                        self.searchController,
                                                        self.tableView,
@@ -2153,7 +1593,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
     self.title = @"Create Playlist";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
     [self setupUI];
     [self updateNameUI];
@@ -2326,9 +1766,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
     NSArray<M2Track *> *tracks = [M2LibraryManager.sharedManager reloadTracks];
     if (tracks.count == 0) {
-        NSString *message = [NSString stringWithFormat:@"Add music files first.\n%@",
-                             M2LibraryManager.sharedManager.filesDropHint];
-        M2PresentAlert(self, @"No Music", message);
+        M2PresentAlert(self, @"No Music", @"Add music files in Files app first.");
         return;
     }
 
@@ -2386,17 +1824,12 @@ replacementString:(NSString *)string {
 
     self.title = @"Select Music";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
-    UIBarButtonItem *createItem = [[UIBarButtonItem alloc] initWithTitle:@"Create"
-                                                                    style:UIBarButtonItemStyleDone
-                                                                   target:self
-                                                                   action:@selector(createTapped)];
-    UIBarButtonItem *searchItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
-                                                                    style:UIBarButtonItemStylePlain
-                                                                   target:self
-                                                                   action:@selector(searchButtonTapped)];
-    self.navigationItem.rightBarButtonItems = @[createItem, searchItem];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Create"
+                                                                               style:UIBarButtonItemStyleDone
+                                                                              target:self
+                                                                              action:@selector(createTapped)];
 
     [self setupTableView];
     [self setupSearch];
@@ -2421,7 +1854,6 @@ replacementString:(NSString *)string {
         tableView.sectionHeaderTopPadding = 0.0;
     }
     [tableView registerClass:M2TrackCell.class forCellReuseIdentifier:@"TrackPickCell"];
-    M2ApplyDesktopTableChrome(tableView);
 
     self.tableView = tableView;
     [self.view addSubview:tableView];
@@ -2493,26 +1925,6 @@ replacementString:(NSString *)string {
     } else {
         [self.navigationController pushViewController:detail animated:YES];
     }
-}
-
-- (void)searchButtonTapped {
-    if (self.searchController == nil) {
-        return;
-    }
-
-    if (!self.searchControllerAttached) {
-        self.searchControllerAttached = YES;
-        M2ApplySearchControllerAttachment(self.navigationItem,
-                                          self.navigationController.navigationBar,
-                                          self.searchController,
-                                          YES,
-                                          (self.view.window != nil));
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.searchController.active = YES;
-        [self.searchController.searchBar becomeFirstResponder];
-    });
 }
 
 #pragma mark - UITableViewDataSource
@@ -2593,7 +2005,7 @@ replacementString:(NSString *)string {
 
     self.title = @"Add Music";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Add"
                                                                                style:UIBarButtonItemStyleDone
@@ -2619,7 +2031,6 @@ replacementString:(NSString *)string {
         tableView.sectionHeaderTopPadding = 0.0;
     }
     [tableView registerClass:M2TrackCell.class forCellReuseIdentifier:@"PlaylistAddTrackCell"];
-    M2ApplyDesktopTableChrome(tableView);
 
     self.tableView = tableView;
     [self.view addSubview:tableView];
@@ -2767,7 +2178,7 @@ replacementString:(NSString *)string {
 
     self.title = @"Change Playlist Cover";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
     [self setupUI];
     [self reloadPreview];
@@ -2992,7 +2403,7 @@ replacementString:(NSString *)string {
     self.navigationItem.titleView = nil;
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.navigationItem.rightBarButtonItem = nil;
-    self.view.backgroundColor = M2ModulePageBackgroundColor();
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
 
     [self setupTableView];
     [self setupSearch];
@@ -3052,7 +2463,6 @@ replacementString:(NSString *)string {
         tableView.sectionHeaderTopPadding = 0.0;
     }
     [tableView registerClass:M2TrackCell.class forCellReuseIdentifier:@"PlaylistTrackCell"];
-    M2ApplyDesktopTableChrome(tableView);
 
     self.tableView = tableView;
     [self.view addSubview:tableView];
@@ -3112,114 +2522,14 @@ replacementString:(NSString *)string {
     label.textAlignment = NSTextAlignmentCenter;
     label.numberOfLines = 0;
     if (self.tracks.count == 0) {
-        label.text = [NSString stringWithFormat:@"Tracks missing.\n%@",
-                      M2LibraryManager.sharedManager.filesDropHint];
+        label.text = @"Tracks missing. Re-add files to On My iPhone/M2/M2";
     } else {
         label.text = @"No matching tracks.";
     }
     self.tableView.backgroundView = label;
 }
 
-- (UIView *)desktopHeaderViewForWidth:(CGFloat)width {
-    CGFloat totalWidth = MAX(width, 620.0);
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, totalWidth, 316.0)];
-    header.backgroundColor = UIColor.clearColor;
-
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectInset(header.bounds, 12.0, 8.0)];
-    panel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    panel.backgroundColor = M2DesktopPanelBackgroundColor();
-    panel.layer.cornerRadius = 22.0;
-    panel.layer.borderWidth = 1.0;
-    panel.layer.borderColor = M2DesktopPanelBorderColor().CGColor;
-    panel.layer.masksToBounds = YES;
-    [header addSubview:panel];
-
-    CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.frame = panel.bounds;
-    gradient.needsDisplayOnBoundsChange = YES;
-    gradient.colors = @[
-        (__bridge id)[UIColor colorWithWhite:0.11 alpha:1.0].CGColor,
-        (__bridge id)[UIColor colorWithWhite:0.05 alpha:1.0].CGColor
-    ];
-    gradient.startPoint = CGPointMake(0.0, 0.0);
-    gradient.endPoint = CGPointMake(1.0, 1.0);
-    [panel.layer insertSublayer:gradient atIndex:0];
-
-    CGFloat coverSize = MIN(210.0, CGRectGetHeight(panel.bounds) - 40.0);
-    CGFloat coverY = (CGRectGetHeight(panel.bounds) - coverSize) * 0.5;
-    UIImageView *coverView = [[UIImageView alloc] initWithFrame:CGRectMake(20.0, coverY, coverSize, coverSize)];
-    coverView.layer.cornerRadius = 16.0;
-    coverView.layer.masksToBounds = YES;
-    coverView.contentMode = UIViewContentModeScaleAspectFill;
-    self.coverView = coverView;
-
-    CGFloat contentX = CGRectGetMaxX(coverView.frame) + 24.0;
-    CGFloat contentWidth = MAX(220.0, CGRectGetWidth(panel.bounds) - contentX - 20.0);
-    UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(contentX, 42.0, contentWidth, 56.0)];
-    nameLabel.textAlignment = NSTextAlignmentLeft;
-    nameLabel.font = M2HeadlineFont(42.0);
-    nameLabel.textColor = UIColor.whiteColor;
-    nameLabel.numberOfLines = 1;
-    self.nameLabel = nameLabel;
-
-    UILabel *hintLabel = [[UILabel alloc] initWithFrame:CGRectMake(contentX, 102.0, contentWidth, 20.0)];
-    hintLabel.text = @"Playlist";
-    hintLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.68];
-    hintLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
-
-    CGFloat playSize = 62.0;
-    CGFloat sideSize = 44.0;
-    CGFloat controlsY = CGRectGetHeight(panel.bounds) - 84.0;
-    CGFloat controlsLeft = contentX;
-
-    UIButton *sleepButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    sleepButton.frame = CGRectMake(controlsLeft, controlsY + (playSize - sideSize) * 0.5, sideSize, sideSize);
-    UIImageSymbolConfiguration *sleepConfig = [UIImageSymbolConfiguration configurationWithPointSize:22.0
-                                                                                               weight:UIImageSymbolWeightSemibold];
-    [sleepButton setImage:[UIImage systemImageNamed:@"moon.zzz" withConfiguration:sleepConfig] forState:UIControlStateNormal];
-    sleepButton.tintColor = UIColor.whiteColor;
-    [sleepButton addTarget:self action:@selector(sleepTimerTapped) forControlEvents:UIControlEventTouchUpInside];
-    self.sleepButton = sleepButton;
-
-    UIButton *playButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    playButton.frame = CGRectMake(CGRectGetMaxX(sleepButton.frame) + 14.0, controlsY, playSize, playSize);
-    playButton.backgroundColor = M2AccentYellowColor();
-    playButton.tintColor = UIColor.blackColor;
-    playButton.layer.cornerRadius = playSize * 0.5;
-    playButton.layer.masksToBounds = YES;
-    UIImageSymbolConfiguration *playConfig = [UIImageSymbolConfiguration configurationWithPointSize:30.0
-                                                                                               weight:UIImageSymbolWeightSemibold];
-    [playButton setImage:[UIImage systemImageNamed:@"play.fill" withConfiguration:playConfig] forState:UIControlStateNormal];
-    [playButton addTarget:self action:@selector(playTapped) forControlEvents:UIControlEventTouchUpInside];
-    self.playButton = playButton;
-
-    UIButton *shuffleButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    shuffleButton.frame = CGRectMake(CGRectGetMaxX(playButton.frame) + 14.0,
-                                     controlsY + (playSize - sideSize) * 0.5,
-                                     sideSize,
-                                     sideSize);
-    UIImageSymbolConfiguration *shuffleConfig = [UIImageSymbolConfiguration configurationWithPointSize:22.0
-                                                                                                 weight:UIImageSymbolWeightSemibold];
-    [shuffleButton setImage:[UIImage systemImageNamed:@"shuffle" withConfiguration:shuffleConfig] forState:UIControlStateNormal];
-    shuffleButton.tintColor = UIColor.whiteColor;
-    [shuffleButton addTarget:self action:@selector(shuffleTapped) forControlEvents:UIControlEventTouchUpInside];
-    self.shuffleButton = shuffleButton;
-
-    [panel addSubview:coverView];
-    [panel addSubview:nameLabel];
-    [panel addSubview:hintLabel];
-    [panel addSubview:sleepButton];
-    [panel addSubview:playButton];
-    [panel addSubview:shuffleButton];
-
-    return header;
-}
-
 - (UIView *)headerViewForWidth:(CGFloat)width {
-    if (M2IsMacCatalyst()) {
-        return [self desktopHeaderViewForWidth:width];
-    }
-
     CGFloat totalWidth = MAX(width, 320.0);
     UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalWidth, 374.0)];
 
@@ -3430,8 +2740,7 @@ replacementString:(NSString *)string {
         return;
     }
 
-    CGFloat threshold = M2IsMacCatalyst() ? 120.0 : 175.0;
-    BOOL shouldShowCompact = self.tableView.contentOffset.y > threshold;
+    BOOL shouldShowCompact = self.tableView.contentOffset.y > 175.0;
     if (shouldShowCompact == self.compactTitleVisible) {
         return;
     }
@@ -3645,26 +2954,6 @@ replacementString:(NSString *)string {
     [self presentViewController:confirm animated:YES completion:nil];
 }
 
-- (void)searchButtonTapped {
-    if (self.searchController == nil) {
-        return;
-    }
-
-    if (!self.searchControllerAttached) {
-        self.searchControllerAttached = YES;
-        M2ApplySearchControllerAttachment(self.navigationItem,
-                                          self.navigationController.navigationBar,
-                                          self.searchController,
-                                          YES,
-                                          (self.view.window != nil));
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.searchController.active = YES;
-        [self.searchController.searchBar becomeFirstResponder];
-    });
-}
-
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -3814,7 +3103,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 @property (nonatomic, strong) UIButton *nextButton;
 @property (nonatomic, strong) UIButton *favoriteButton;
 @property (nonatomic, strong) UIButton *sleepTimerButton;
-@property (nonatomic, strong) UIView *desktopShellView;
 @property (nonatomic, assign) BOOL scrubbing;
 
 @end
@@ -3825,10 +3113,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     [super viewDidLoad];
 
     self.view.backgroundColor = M2PlayerBackgroundColor();
-    self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    if (M2IsMacCatalyst()) {
-        self.title = @"Now Playing";
-    }
 
     [self setupUI];
     [self applyPlayerTheme];
@@ -3846,11 +3130,13 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         }];
     }
 
-    if (!M2IsMacCatalyst()) {
-        UISwipeGestureRecognizer *swipeDown = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleDismissSwipe)];
-        swipeDown.direction = UISwipeGestureRecognizerDirectionDown;
-        [self.view addGestureRecognizer:swipeDown];
-    }
+    UISwipeGestureRecognizer *swipeDown = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleDismissSwipe)];
+    swipeDown.direction = UISwipeGestureRecognizerDirectionDown;
+    [self.view addGestureRecognizer:swipeDown];
+
+    UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleDismissSwipe)];
+    swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
+    [self.view addGestureRecognizer:swipeRight];
 
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(refreshUI)
@@ -3881,34 +3167,20 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    if (M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:NO animated:animated];
-    } else {
-        [self.navigationController setNavigationBarHidden:YES animated:animated];
-    }
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    if (self.navigationController != nil) {
-        self.navigationController.interactivePopGestureRecognizer.delegate = nil;
-        self.navigationController.interactivePopGestureRecognizer.enabled = !M2IsMacCatalyst();
-    }
+    self.navigationController.interactivePopGestureRecognizer.enabled = YES;
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    if (!M2IsMacCatalyst()) {
-        [self.navigationController setNavigationBarHidden:NO animated:animated];
-    }
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
 }
 
 - (void)setupUI {
-    if (M2IsMacCatalyst()) {
-        [self setupDesktopUI];
-        return;
-    }
-
     UIView *content = [[UIView alloc] init];
     content.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -4108,221 +3380,6 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     ]];
 }
 
-- (void)setupDesktopUI {
-    UIView *shell = [[UIView alloc] init];
-    shell.translatesAutoresizingMaskIntoConstraints = NO;
-    shell.backgroundColor = M2DesktopPanelBackgroundColor();
-    shell.layer.cornerRadius = 24.0;
-    shell.layer.masksToBounds = YES;
-    shell.layer.borderWidth = 1.0;
-    shell.layer.borderColor = M2DesktopPanelBorderColor().CGColor;
-    self.desktopShellView = shell;
-    [self.view addSubview:shell];
-
-    UIView *content = [[UIView alloc] init];
-    content.translatesAutoresizingMaskIntoConstraints = NO;
-    [shell addSubview:content];
-
-    UIImageView *artworkView = [[UIImageView alloc] init];
-    artworkView.translatesAutoresizingMaskIntoConstraints = NO;
-    artworkView.contentMode = UIViewContentModeScaleAspectFill;
-    artworkView.layer.cornerRadius = 18.0;
-    artworkView.layer.masksToBounds = YES;
-    self.artworkView = artworkView;
-
-    UILabel *artistLabel = [[UILabel alloc] init];
-    artistLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    artistLabel.textAlignment = NSTextAlignmentLeft;
-    artistLabel.font = [UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold];
-    artistLabel.numberOfLines = 1;
-    self.subtitleLabel = artistLabel;
-
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.textAlignment = NSTextAlignmentLeft;
-    titleLabel.font = M2HeadlineFont(42.0);
-    titleLabel.numberOfLines = 1;
-    self.titleLabel = titleLabel;
-
-    UISlider *slider = [[UISlider alloc] init];
-    slider.translatesAutoresizingMaskIntoConstraints = NO;
-    slider.minimumValue = 0.0;
-    slider.maximumValue = 1.0;
-    [slider addTarget:self action:@selector(sliderTouchDown) forControlEvents:UIControlEventTouchDown];
-    [slider addTarget:self action:@selector(sliderChanged) forControlEvents:UIControlEventValueChanged];
-    [slider addTarget:self action:@selector(sliderTouchUp) forControlEvents:UIControlEventTouchUpInside];
-    [slider addTarget:self action:@selector(sliderTouchUp) forControlEvents:UIControlEventTouchUpOutside];
-    [slider addTarget:self action:@selector(sliderTouchUp) forControlEvents:UIControlEventTouchCancel];
-    self.progressSlider = slider;
-
-    UILabel *elapsedLabel = [[UILabel alloc] init];
-    elapsedLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    elapsedLabel.font = [UIFont monospacedDigitSystemFontOfSize:13.0 weight:UIFontWeightSemibold];
-    self.elapsedLabel = elapsedLabel;
-
-    UILabel *durationLabel = [[UILabel alloc] init];
-    durationLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    durationLabel.textAlignment = NSTextAlignmentRight;
-    durationLabel.font = [UIFont monospacedDigitSystemFontOfSize:13.0 weight:UIFontWeightSemibold];
-    self.durationLabel = durationLabel;
-
-    UILabel *nextPreviewLabel = [[UILabel alloc] init];
-    nextPreviewLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    nextPreviewLabel.textAlignment = NSTextAlignmentLeft;
-    nextPreviewLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightSemibold];
-    nextPreviewLabel.numberOfLines = 2;
-    self.nextPreviewLabel = nextPreviewLabel;
-
-    self.repeatButton = M2PlainIconButton(@"repeat", 22.0, 600.0);
-    [self.repeatButton addTarget:self action:@selector(toggleRepeatTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.repeatButton.widthAnchor constraintEqualToConstant:38.0],
-        [self.repeatButton.heightAnchor constraintEqualToConstant:38.0]
-    ]];
-
-    self.shuffleButton = M2PlainIconButton(@"shuffle", 22.0, 600.0);
-    [self.shuffleButton addTarget:self action:@selector(toggleShuffleTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.shuffleButton.widthAnchor constraintEqualToConstant:38.0],
-        [self.shuffleButton.heightAnchor constraintEqualToConstant:38.0]
-    ]];
-
-    self.previousButton = M2PlainIconButton(@"backward.fill", 34.0, 700.0);
-    [self.previousButton addTarget:self action:@selector(previousTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.previousButton.widthAnchor constraintEqualToConstant:58.0],
-        [self.previousButton.heightAnchor constraintEqualToConstant:58.0]
-    ]];
-
-    self.playPauseButton = M2PlainIconButton(@"play.fill", 42.0, 700.0);
-    [self.playPauseButton addTarget:self action:@selector(playPauseTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.playPauseButton.widthAnchor constraintEqualToConstant:72.0],
-        [self.playPauseButton.heightAnchor constraintEqualToConstant:72.0]
-    ]];
-
-    self.nextButton = M2PlainIconButton(@"forward.fill", 34.0, 700.0);
-    [self.nextButton addTarget:self action:@selector(nextTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.nextButton.widthAnchor constraintEqualToConstant:58.0],
-        [self.nextButton.heightAnchor constraintEqualToConstant:58.0]
-    ]];
-
-    self.favoriteButton = M2PlainIconButton(@"heart", 22.0, 600.0);
-    [self.favoriteButton addTarget:self action:@selector(toggleFavoriteTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.favoriteButton.widthAnchor constraintEqualToConstant:38.0],
-        [self.favoriteButton.heightAnchor constraintEqualToConstant:38.0]
-    ]];
-
-    self.sleepTimerButton = M2PlainIconButton(@"moon.zzz", 22.0, 600.0);
-    [self.sleepTimerButton addTarget:self action:@selector(sleepTimerTapped) forControlEvents:UIControlEventTouchUpInside];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.sleepTimerButton.widthAnchor constraintEqualToConstant:38.0],
-        [self.sleepTimerButton.heightAnchor constraintEqualToConstant:38.0]
-    ]];
-
-    UIStackView *modeStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.repeatButton, self.shuffleButton]];
-    modeStack.translatesAutoresizingMaskIntoConstraints = NO;
-    modeStack.axis = UILayoutConstraintAxisHorizontal;
-    modeStack.alignment = UIStackViewAlignmentCenter;
-    modeStack.distribution = UIStackViewDistributionEqualSpacing;
-    modeStack.spacing = 8.0;
-
-    UIStackView *rightStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.sleepTimerButton, self.favoriteButton]];
-    rightStack.translatesAutoresizingMaskIntoConstraints = NO;
-    rightStack.axis = UILayoutConstraintAxisHorizontal;
-    rightStack.alignment = UIStackViewAlignmentCenter;
-    rightStack.distribution = UIStackViewDistributionEqualSpacing;
-    rightStack.spacing = 8.0;
-
-    UIStackView *transportStack = [[UIStackView alloc] initWithArrangedSubviews:@[
-        self.previousButton, self.playPauseButton, self.nextButton
-    ]];
-    transportStack.translatesAutoresizingMaskIntoConstraints = NO;
-    transportStack.axis = UILayoutConstraintAxisHorizontal;
-    transportStack.alignment = UIStackViewAlignmentCenter;
-    transportStack.distribution = UIStackViewDistributionEqualCentering;
-    transportStack.spacing = 16.0;
-
-    UIView *controlsRow = [[UIView alloc] init];
-    controlsRow.translatesAutoresizingMaskIntoConstraints = NO;
-
-    [content addSubview:artworkView];
-    [content addSubview:artistLabel];
-    [content addSubview:titleLabel];
-    [content addSubview:slider];
-    [content addSubview:elapsedLabel];
-    [content addSubview:durationLabel];
-    [content addSubview:nextPreviewLabel];
-    [content addSubview:controlsRow];
-
-    [controlsRow addSubview:modeStack];
-    [controlsRow addSubview:transportStack];
-    [controlsRow addSubview:rightStack];
-
-    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
-    NSLayoutConstraint *artworkRatio = [artworkView.heightAnchor constraintEqualToAnchor:artworkView.widthAnchor];
-    NSLayoutConstraint *artworkWidthByContainer = [artworkView.widthAnchor constraintEqualToAnchor:content.widthAnchor multiplier:0.40];
-    artworkWidthByContainer.priority = UILayoutPriorityDefaultHigh;
-
-    [NSLayoutConstraint activateConstraints:@[
-        [shell.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12.0],
-        [shell.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:14.0],
-        [shell.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-14.0],
-        [shell.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-12.0],
-
-        [content.topAnchor constraintEqualToAnchor:shell.topAnchor constant:20.0],
-        [content.leadingAnchor constraintEqualToAnchor:shell.leadingAnchor constant:20.0],
-        [content.trailingAnchor constraintEqualToAnchor:shell.trailingAnchor constant:-20.0],
-        [content.bottomAnchor constraintEqualToAnchor:shell.bottomAnchor constant:-20.0],
-
-        [artworkView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
-        [artworkView.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
-        artworkWidthByContainer,
-        [artworkView.widthAnchor constraintLessThanOrEqualToConstant:460.0],
-        [artworkView.widthAnchor constraintGreaterThanOrEqualToConstant:270.0],
-        artworkRatio,
-
-        [artistLabel.topAnchor constraintEqualToAnchor:content.topAnchor constant:10.0],
-        [artistLabel.leadingAnchor constraintEqualToAnchor:artworkView.trailingAnchor constant:28.0],
-        [artistLabel.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
-
-        [titleLabel.topAnchor constraintEqualToAnchor:artistLabel.bottomAnchor constant:5.0],
-        [titleLabel.leadingAnchor constraintEqualToAnchor:artistLabel.leadingAnchor],
-        [titleLabel.trailingAnchor constraintEqualToAnchor:artistLabel.trailingAnchor],
-
-        [slider.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:22.0],
-        [slider.leadingAnchor constraintEqualToAnchor:artistLabel.leadingAnchor],
-        [slider.trailingAnchor constraintEqualToAnchor:artistLabel.trailingAnchor],
-
-        [elapsedLabel.topAnchor constraintEqualToAnchor:slider.bottomAnchor constant:4.0],
-        [elapsedLabel.leadingAnchor constraintEqualToAnchor:slider.leadingAnchor],
-
-        [durationLabel.topAnchor constraintEqualToAnchor:elapsedLabel.topAnchor],
-        [durationLabel.trailingAnchor constraintEqualToAnchor:slider.trailingAnchor],
-
-        [nextPreviewLabel.topAnchor constraintEqualToAnchor:elapsedLabel.bottomAnchor constant:16.0],
-        [nextPreviewLabel.leadingAnchor constraintEqualToAnchor:slider.leadingAnchor],
-        [nextPreviewLabel.trailingAnchor constraintEqualToAnchor:slider.trailingAnchor],
-
-        [controlsRow.leadingAnchor constraintEqualToAnchor:slider.leadingAnchor],
-        [controlsRow.trailingAnchor constraintEqualToAnchor:slider.trailingAnchor],
-        [controlsRow.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-4.0],
-        [controlsRow.heightAnchor constraintEqualToConstant:92.0],
-        [nextPreviewLabel.bottomAnchor constraintLessThanOrEqualToAnchor:controlsRow.topAnchor constant:-14.0],
-
-        [modeStack.leadingAnchor constraintEqualToAnchor:controlsRow.leadingAnchor],
-        [modeStack.centerYAnchor constraintEqualToAnchor:controlsRow.centerYAnchor],
-
-        [transportStack.centerXAnchor constraintEqualToAnchor:controlsRow.centerXAnchor],
-        [transportStack.centerYAnchor constraintEqualToAnchor:controlsRow.centerYAnchor],
-
-        [rightStack.trailingAnchor constraintEqualToAnchor:controlsRow.trailingAnchor],
-        [rightStack.centerYAnchor constraintEqualToAnchor:controlsRow.centerYAnchor]
-    ]];
-}
-
 - (void)handleDismissSwipe {
     [self.navigationController popViewControllerAnimated:YES];
 }
@@ -4332,32 +3389,17 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     UIColor *secondary = M2PlayerSecondaryColor();
 
     self.view.backgroundColor = M2PlayerBackgroundColor();
-    self.desktopShellView.backgroundColor = M2DesktopPanelBackgroundColor();
-    self.desktopShellView.layer.borderColor = M2DesktopPanelBorderColor().CGColor;
     self.titleLabel.textColor = primary;
     self.subtitleLabel.textColor = secondary;
     self.elapsedLabel.textColor = secondary;
     self.durationLabel.textColor = secondary;
     self.nextPreviewLabel.textColor = secondary;
 
-#if TARGET_OS_MACCATALYST
-    // UISlider color/thumbnail customization is unsupported in Mac idiom.
-    if (@available(iOS 14.0, *)) {
-        if (self.traitCollection.userInterfaceIdiom != UIUserInterfaceIdiomMac) {
-            self.progressSlider.minimumTrackTintColor = primary;
-            self.progressSlider.maximumTrackTintColor = M2PlayerTimelineMaxColor();
-            UIImage *thumbImage = M2SliderThumbImage(14.5, primary);
-            [self.progressSlider setThumbImage:thumbImage forState:UIControlStateNormal];
-            [self.progressSlider setThumbImage:thumbImage forState:UIControlStateHighlighted];
-        }
-    }
-#else
     self.progressSlider.minimumTrackTintColor = primary;
     self.progressSlider.maximumTrackTintColor = M2PlayerTimelineMaxColor();
     UIImage *thumbImage = M2SliderThumbImage(14.5, primary);
     [self.progressSlider setThumbImage:thumbImage forState:UIControlStateNormal];
     [self.progressSlider setThumbImage:thumbImage forState:UIControlStateHighlighted];
-#endif
 
     BOOL controlsEnabled = self.playPauseButton.enabled;
     UIColor *controlColor = controlsEnabled ? primary : [secondary colorWithAlphaComponent:0.65];
@@ -4535,8 +3577,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 
 - (void)updatePlayPauseIcon {
     NSString *symbol = M2PlaybackManager.sharedManager.isPlaying ? @"pause.fill" : @"play.fill";
-    CGFloat pointSize = M2IsMacCatalyst() ? 42.0 : 56.0;
-    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:pointSize
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:56.0
                                                                                            weight:UIImageSymbolWeightBold];
     [self.playPauseButton setImage:[UIImage systemImageNamed:symbol withConfiguration:config] forState:UIControlStateNormal];
 }

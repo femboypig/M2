@@ -20,7 +20,6 @@
     <nav id="site-nav" class="top-nav" data-site-nav aria-label="Primary">
       <a href="index.html" data-nav="index.html">Home</a>
       <a href="architecture.html" data-nav="architecture.html">Architecture</a>
-      <a href="desktop-catalyst.html" data-nav="desktop-catalyst.html">Desktop Catalyst</a>
       <a href="services-data.html" data-nav="services-data.html">Services & Data</a>
       <a href="build-ci.html" data-nav="build-ci.html">Build & CI</a>
     </nav>
@@ -45,8 +44,6 @@
         <p class="eyebrow">Operations</p>
         <h1>Build & CI</h1>
         <ul>
-          <li>Xcode with iOS + Mac Catalyst SDKs.</li>
-          <li>macOS environment for Catalyst builds.</li>
           <li>No network dependency for core app build path.</li>
         </ul>
       </section>
@@ -60,9 +57,6 @@
             <button class="copy-btn" data-copy="xcodebuild -project \"M2.xcodeproj\" -scheme \"M2\" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO clean build">Copy</button>
           </article>
           <article class="command-box">
-            <p>Mac Catalyst build</p>
-            <code>xcodebuild -project "M2.xcodeproj" -scheme "M2" -configuration Debug -destination "platform=macOS,variant=Mac Catalyst" -derivedDataPath .derivedData build CODE_SIGNING_ALLOWED=NO</code>
-            <button class="copy-btn" data-copy="xcodebuild -project \"M2.xcodeproj\" -scheme \"M2\" -configuration Debug -destination \"platform=macOS,variant=Mac Catalyst\" -derivedDataPath .derivedData build CODE_SIGNING_ALLOWED=NO">Copy</button>
           </article>
           <article class="command-box">
             <p>Extension target build</p>
@@ -90,8 +84,6 @@
             </tr>
             <tr>
               <td><code>M2</code></td>
-              <td>My Mac (Mac Catalyst)</td>
-              <td>Desktop runtime with sidebar shell.</td>
             </tr>
             <tr>
               <td><code>M2LiveActivityExtension</code></td>
@@ -113,11 +105,8 @@
       <section id="checks" class="card section">
         <h2>Verification Checklist</h2>
         <ul class="clean-list">
-          <li>Build succeeds for simulator and Catalyst targets.</li>
           <li>Playlists tab opens My Playlists hub from clickable heading/arrow.</li>
           <li>Hover overlay on playlist cards works with play + pin action.</li>
-          <li>Pinned playlists appear and open from desktop sidebar.</li>
-          <li>Desktop Favorites renders 2-column list and opens player correctly.</li>
         </ul>
       </section>
 
@@ -140,8 +129,6 @@
               <td>Use local <code>-derivedDataPath .derivedData</code> and clean build.</td>
             </tr>
             <tr>
-              <td>Desktop UI not updating pinned section</td>
-              <td>Verify defaults key <code>m2_desktop_pinned_playlists_v1</code> and relaunch shell tab.</td>
             </tr>
           </tbody>
         </table>
@@ -150,9 +137,7 @@
       <section id="release" class="card section">
         <h2>Release Checklist</h2>
         <ol>
-          <li>Run simulator + Catalyst builds.</li>
           <li>Smoke-test playback, playlists, favorites, and sleep timer.</li>
-          <li>Validate desktop-specific flows (hover, pin, favorites layout).</li>
           <li>Update docs pages if behavior or keys changed.</li>
           <li>Tag and push release commit.</li>
         </ol>

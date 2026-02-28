@@ -10,7 +10,6 @@
 #import <math.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <objc/message.h>
-#import <TargetConditionals.h>
 
 #import "AppDelegate.h"
 
@@ -39,17 +38,6 @@ static NSString * const kTrackMetadataCacheTitleKey = @"title";
 static NSString * const kTrackMetadataCacheArtistKey = @"artist";
 static NSString * const kTrackMetadataCacheDurationKey = @"duration";
 static NSString * const kTrackMetadataCacheArtworkFileKey = @"artworkFile";
-static NSString * const kPlaybackSnapshotDefaultsKey = @"m2_playback_snapshot_v1";
-static NSString * const kPlaybackSnapshotQueueIDsKey = @"queueIDs";
-static NSString * const kPlaybackSnapshotCurrentIndexKey = @"currentIndex";
-static NSString * const kPlaybackSnapshotCurrentTrackIDKey = @"currentTrackID";
-static NSString * const kPlaybackSnapshotCurrentTimeKey = @"currentTime";
-static NSString * const kPlaybackSnapshotRepeatModeKey = @"repeatMode";
-static NSString * const kPlaybackSnapshotShuffleEnabledKey = @"shuffleEnabled";
-static NSString * const kPlaybackSnapshotWasPlayingKey = @"wasPlaying";
-static NSTimeInterval const kPlaybackSnapshotAutosaveInterval = 2.0;
-static NSTimeInterval const kNowPlayingTickUpdateInterval = 1.0;
-static NSTimeInterval const kLibraryReloadThrottleInterval = 0.75;
 
 static NSArray<NSString *> *M2LegacyPlaylistsDefaultsKeys(void) {
     return @[@"m2_playlists_v1", @"m2_playlists"];
@@ -75,6 +63,48 @@ static NSString *M2StableHashString(NSString *value) {
     return [NSString stringWithFormat:@"%016llx", hash];
 }
 
+static void M2SyncSleepLiveActivity(NSTimeInterval remainingSeconds) {
+    if (!isfinite(remainingSeconds) || remainingSeconds <= 0.0) {
+        return;
+    }
+
+    Class bridgeClass = NSClassFromString(@"M2SleepLiveActivityBridge");
+    if (bridgeClass == Nil) {
+        return;
+    }
+
+    SEL selector = NSSelectorFromString(@"syncSleepTimerWithRemaining:title:subtitle:");
+    if (![bridgeClass respondsToSelector:selector]) {
+        return;
+    }
+
+    M2Track *track = M2PlaybackManager.sharedManager.currentTrack;
+    NSString *title = track.title.length > 0 ? track.title : @"Sleep Timer";
+    NSString *subtitle = track.artist.length > 0 ? track.artist : @"";
+
+    void (*function)(id, SEL, NSTimeInterval, NSString *, NSString *) = (void *)[bridgeClass methodForSelector:selector];
+    if (function != NULL) {
+        function(bridgeClass, selector, remainingSeconds, title, subtitle);
+    }
+}
+
+static void M2EndSleepLiveActivity(void) {
+    Class bridgeClass = NSClassFromString(@"M2SleepLiveActivityBridge");
+    if (bridgeClass == Nil) {
+        return;
+    }
+
+    SEL selector = NSSelectorFromString(@"endSleepTimerActivity");
+    if (![bridgeClass respondsToSelector:selector]) {
+        return;
+    }
+
+    void (*function)(id, SEL) = (void *)[bridgeClass methodForSelector:selector];
+    if (function != NULL) {
+        function(bridgeClass, selector);
+    }
+}
+
 #pragma mark - Artwork Accent
 
 static UIColor *M2AverageColorFromImage(UIImage *image) {
@@ -82,40 +112,6 @@ static UIColor *M2AverageColorFromImage(UIImage *image) {
         return nil;
     }
 
-#if TARGET_OS_MACCATALYST
-    uint8_t rgba[4] = {0, 0, 0, 0};
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    if (colorSpace == nil) {
-        return nil;
-    }
-
-    CGBitmapInfo bitmapInfo = (CGBitmapInfo)(kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-    CGContextRef bitmapContext = CGBitmapContextCreate(rgba,
-                                                       1,
-                                                       1,
-                                                       8,
-                                                       4,
-                                                       colorSpace,
-                                                       bitmapInfo);
-    CGColorSpaceRelease(colorSpace);
-    if (bitmapContext == NULL) {
-        return nil;
-    }
-
-    CGContextSetInterpolationQuality(bitmapContext, kCGInterpolationLow);
-    CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, 1.0, 1.0), image.CGImage);
-    CGContextRelease(bitmapContext);
-
-    CGFloat alpha = ((CGFloat)rgba[3]) / 255.0;
-    if (alpha <= 0.02) {
-        return nil;
-    }
-
-    return [UIColor colorWithRed:((CGFloat)rgba[0]) / 255.0
-                           green:((CGFloat)rgba[1]) / 255.0
-                            blue:((CGFloat)rgba[2]) / 255.0
-                           alpha:1.0];
-#else
     CIImage *inputImage = [[CIImage alloc] initWithCGImage:image.CGImage];
     if (inputImage == nil) {
         return nil;
@@ -136,7 +132,9 @@ static UIColor *M2AverageColorFromImage(UIImage *image) {
     static CIContext *context = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        context = [CIContext contextWithOptions:nil];
+        context = [CIContext contextWithOptions:@{
+            kCIContextUseSoftwareRenderer: @NO
+        }];
     });
 
     uint8_t rgba[4] = {0, 0, 0, 0};
@@ -162,7 +160,6 @@ static UIColor *M2AverageColorFromImage(UIImage *image) {
                            green:((CGFloat)rgba[1]) / 255.0
                             blue:((CGFloat)rgba[2]) / 255.0
                            alpha:1.0];
-#endif
 }
 
 enum {
@@ -501,9 +498,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *trackMetadataCache;
 @property (nonatomic, assign) BOOL trackMetadataCacheLoaded;
 @property (nonatomic, assign) BOOL trackMetadataCacheDirty;
-@property (nonatomic, assign) BOOL reloadInProgress;
-@property (nonatomic, assign) NSTimeInterval lastReloadTimestamp;
-@property (nonatomic, assign) NSTimeInterval lastMusicDirectoryModifiedTimestamp;
 
 @end
 
@@ -528,9 +522,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         _trackMetadataCache = [NSMutableDictionary dictionary];
         _trackMetadataCacheLoaded = NO;
         _trackMetadataCacheDirty = NO;
-        _reloadInProgress = NO;
-        _lastReloadTimestamp = 0.0;
-        _lastMusicDirectoryModifiedTimestamp = 0.0;
         [self reloadTracks];
     }
     return self;
@@ -553,54 +544,11 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 }
 
 - (NSString *)filesDropHint {
-#if TARGET_OS_MACCATALYST
-    return @"Finder -> M2 Container -> Documents -> M2";
-#else
     return @"Files -> On My iPhone -> M2 -> M2";
-#endif
-}
-
-- (BOOL)openMusicDirectoryWithCompletion:(void (^ _Nullable)(BOOL success))completion {
-    NSURL *directoryURL = [self musicDirectoryURL];
-    if (directoryURL == nil) {
-        if (completion != nil) {
-            completion(NO);
-        }
-        return NO;
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIApplication *application = UIApplication.sharedApplication;
-        [application openURL:directoryURL
-                     options:@{}
-           completionHandler:^(BOOL success) {
-            if (completion != nil) {
-                completion(success);
-            }
-        }];
-    });
-
-    return YES;
 }
 
 - (NSArray<M2Track *> *)tracks {
-    @synchronized (self) {
-        return self.cachedTracks;
-    }
-}
-
-- (NSTimeInterval)musicDirectoryModifiedTimestampForURL:(NSURL *)musicURL {
-    if (musicURL == nil || musicURL.path.length == 0) {
-        return 0.0;
-    }
-
-    NSDictionary<NSFileAttributeKey, id> *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:musicURL.path
-                                                                                                       error:nil];
-    NSDate *modificationDate = [attributes objectForKey:NSFileModificationDate];
-    if (![modificationDate isKindOfClass:NSDate.class]) {
-        return 0.0;
-    }
-    return modificationDate.timeIntervalSince1970;
+    return self.cachedTracks;
 }
 
 - (NSURL *)trackMetadataCacheDirectoryURL {
@@ -902,25 +850,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
 - (NSArray<M2Track *> *)reloadTracks {
     NSURL *musicURL = [self musicDirectoryURL];
-    NSTimeInterval directoryModifiedTimestamp = [self musicDirectoryModifiedTimestampForURL:musicURL];
-    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
-
-    @synchronized (self) {
-        if (self.reloadInProgress) {
-            return self.cachedTracks;
-        }
-        BOOL hasDirectoryTimestamp = (directoryModifiedTimestamp > 0.0);
-        BOOL recentlyReloaded = (self.lastReloadTimestamp > 0.0 &&
-                                 (now - self.lastReloadTimestamp) < kLibraryReloadThrottleInterval);
-        BOOL directoryUnchanged = (hasDirectoryTimestamp &&
-                                   fabs(directoryModifiedTimestamp - self.lastMusicDirectoryModifiedTimestamp) < 0.001);
-        if (recentlyReloaded && directoryUnchanged) {
-            return self.cachedTracks;
-        }
-        self.reloadInProgress = YES;
-    }
-
-    @try {
     NSFileManager *fileManager = NSFileManager.defaultManager;
     [self loadTrackMetadataCacheIfNeeded];
     NSDictionary<NSString *, NSDictionary<NSString *, id> *> *previousCacheSnapshot = [self.trackMetadataCache copy] ?: @{};
@@ -1037,10 +966,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     self.tracksByID = [mapping copy];
     self.tracksByRelativeID = [relativeMapping copy];
     self.tracksByFileName = [fileNameMapping copy];
-    self.lastReloadTimestamp = now;
-    if (directoryModifiedTimestamp > 0.0) {
-        self.lastMusicDirectoryModifiedTimestamp = directoryModifiedTimestamp;
-    }
 
     self.trackMetadataCache = nextCache;
     NSDictionary<NSString *, NSDictionary<NSString *, id> *> *nextCacheSnapshot = [nextCache copy] ?: @{};
@@ -1050,11 +975,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     return self.cachedTracks;
-    } @finally {
-        @synchronized (self) {
-            self.reloadInProgress = NO;
-        }
-    }
 }
 
 - (nullable M2Track *)trackForIdentifier:(NSString *)identifier {
@@ -1131,10 +1051,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         return NO;
     }
 
-    @synchronized (self) {
-        self.lastReloadTimestamp = 0.0;
-        self.lastMusicDirectoryModifiedTimestamp = 0.0;
-    }
     [self reloadTracks];
     return YES;
 }
@@ -2291,9 +2207,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 @property (nonatomic, assign) NSTimeInterval analyticsTrackDuration;
 @property (nonatomic, assign) NSTimeInterval analyticsMaxProgressTime;
 @property (nonatomic, assign) BOOL analyticsDidSeekNearEnd;
-@property (nonatomic, assign) NSTimeInterval pendingResumeTime;
-@property (nonatomic, assign) NSTimeInterval lastNowPlayingInfoUpdateTimestamp;
-@property (nonatomic, assign) NSTimeInterval lastSnapshotSaveTimestamp;
 
 @end
 
@@ -2321,186 +2234,10 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         _analyticsTrackDuration = 0.0;
         _analyticsMaxProgressTime = 0.0;
         _analyticsDidSeekNearEnd = NO;
-        _pendingResumeTime = 0.0;
-        _lastNowPlayingInfoUpdateTimestamp = 0.0;
-        _lastSnapshotSaveTimestamp = 0.0;
-        [NSNotificationCenter.defaultCenter addObserver:self
-                                               selector:@selector(handleApplicationWillResignActive:)
-                                                   name:UIApplicationWillResignActiveNotification
-                                                 object:nil];
-        [NSNotificationCenter.defaultCenter addObserver:self
-                                               selector:@selector(handleApplicationDidEnterBackground:)
-                                                   name:UIApplicationDidEnterBackgroundNotification
-                                                 object:nil];
-        [self restorePlaybackSnapshotIfNeeded];
         [self configureRemoteCommands];
         [self updateRemoteCommandAvailability];
     }
     return self;
-}
-
-- (void)dealloc {
-    [NSNotificationCenter.defaultCenter removeObserver:self];
-}
-
-- (void)handleApplicationWillResignActive:(NSNotification *)notification {
-    (void)notification;
-    [self persistPlaybackSnapshotForced:YES];
-}
-
-- (void)handleApplicationDidEnterBackground:(NSNotification *)notification {
-    (void)notification;
-    [self persistPlaybackSnapshotForced:YES];
-}
-
-- (void)restorePlaybackSnapshotIfNeeded {
-    NSDictionary<NSString *, id> *snapshot = [NSUserDefaults.standardUserDefaults objectForKey:kPlaybackSnapshotDefaultsKey];
-    if (![snapshot isKindOfClass:NSDictionary.class]) {
-        return;
-    }
-
-    NSArray *queueIDsRaw = [snapshot objectForKey:kPlaybackSnapshotQueueIDsKey];
-    if (![queueIDsRaw isKindOfClass:NSArray.class] || queueIDsRaw.count == 0) {
-        return;
-    }
-
-    M2LibraryManager *library = M2LibraryManager.sharedManager;
-    NSMutableArray<M2Track *> *resolvedQueue = [NSMutableArray arrayWithCapacity:queueIDsRaw.count];
-    for (id value in queueIDsRaw) {
-        if (![value isKindOfClass:NSString.class]) {
-            continue;
-        }
-        M2Track *track = [library trackForIdentifier:(NSString *)value];
-        if (track != nil) {
-            [resolvedQueue addObject:track];
-        }
-    }
-
-    if (resolvedQueue.count == 0) {
-        return;
-    }
-
-    NSString *currentTrackID = [[snapshot objectForKey:kPlaybackSnapshotCurrentTrackIDKey] isKindOfClass:NSString.class]
-                             ? [snapshot objectForKey:kPlaybackSnapshotCurrentTrackIDKey]
-                             : @"";
-    NSInteger restoredIndex = NSNotFound;
-    if (currentTrackID.length > 0) {
-        NSUInteger foundIndex = [resolvedQueue indexOfObjectPassingTest:^BOOL(M2Track * _Nonnull track, NSUInteger idx, BOOL * _Nonnull stop) {
-            (void)idx;
-            (void)stop;
-            return [track.identifier isEqualToString:currentTrackID];
-        }];
-        if (foundIndex != NSNotFound) {
-            restoredIndex = (NSInteger)foundIndex;
-        }
-    }
-
-    if (restoredIndex == NSNotFound) {
-        NSNumber *indexValue = [[snapshot objectForKey:kPlaybackSnapshotCurrentIndexKey] isKindOfClass:NSNumber.class]
-                             ? [snapshot objectForKey:kPlaybackSnapshotCurrentIndexKey]
-                             : @(0);
-        NSInteger candidate = indexValue.integerValue;
-        if (candidate < 0) {
-            candidate = 0;
-        }
-        if (candidate >= (NSInteger)resolvedQueue.count) {
-            candidate = (NSInteger)resolvedQueue.count - 1;
-        }
-        restoredIndex = candidate;
-    }
-
-    NSNumber *repeatValue = [[snapshot objectForKey:kPlaybackSnapshotRepeatModeKey] isKindOfClass:NSNumber.class]
-                          ? [snapshot objectForKey:kPlaybackSnapshotRepeatModeKey]
-                          : @(M2RepeatModeNone);
-    NSInteger rawRepeatMode = repeatValue.integerValue;
-    if (rawRepeatMode < M2RepeatModeNone || rawRepeatMode > M2RepeatModeTrack) {
-        rawRepeatMode = M2RepeatModeNone;
-    }
-
-    NSNumber *shuffleValue = [[snapshot objectForKey:kPlaybackSnapshotShuffleEnabledKey] isKindOfClass:NSNumber.class]
-                           ? [snapshot objectForKey:kPlaybackSnapshotShuffleEnabledKey]
-                           : @(NO);
-    NSNumber *timeValue = [[snapshot objectForKey:kPlaybackSnapshotCurrentTimeKey] isKindOfClass:NSNumber.class]
-                        ? [snapshot objectForKey:kPlaybackSnapshotCurrentTimeKey]
-                        : @(0.0);
-
-    NSTimeInterval restoredTime = timeValue.doubleValue;
-    if (!isfinite(restoredTime) || restoredTime < 0.0) {
-        restoredTime = 0.0;
-    }
-    if (restoredIndex != NSNotFound) {
-        M2Track *restoredTrack = resolvedQueue[(NSUInteger)restoredIndex];
-        NSTimeInterval maxDuration = restoredTrack.duration;
-        if (isfinite(maxDuration) && maxDuration > 0.0) {
-            restoredTime = MIN(restoredTime, maxDuration);
-        }
-    }
-
-    self.queue = [resolvedQueue copy];
-    self.currentIndex = restoredIndex;
-    self.repeatMode = (M2RepeatMode)rawRepeatMode;
-    _shuffleEnabled = shuffleValue.boolValue;
-    self.pendingResumeTime = restoredTime;
-    [self.shuffleBag removeAllObjects];
-    [self.shuffleHistory removeAllObjects];
-    [self rebuildShuffleBagIfNeeded];
-}
-
-- (void)persistPlaybackSnapshotForced:(BOOL)forced {
-    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
-    if (!forced && self.lastSnapshotSaveTimestamp > 0.0 &&
-        (now - self.lastSnapshotSaveTimestamp) < kPlaybackSnapshotAutosaveInterval) {
-        return;
-    }
-    self.lastSnapshotSaveTimestamp = now;
-
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    if (self.queue.count == 0) {
-        [defaults removeObjectForKey:kPlaybackSnapshotDefaultsKey];
-        return;
-    }
-
-    NSMutableArray<NSString *> *queueIDs = [NSMutableArray arrayWithCapacity:self.queue.count];
-    for (M2Track *track in self.queue) {
-        if (track.identifier.length > 0) {
-            [queueIDs addObject:track.identifier];
-        }
-    }
-
-    if (queueIDs.count == 0) {
-        [defaults removeObjectForKey:kPlaybackSnapshotDefaultsKey];
-        return;
-    }
-
-    NSString *currentTrackID = self.currentTrack.identifier;
-    NSInteger snapshotIndex = 0;
-    if (currentTrackID.length > 0) {
-        NSUInteger foundIndex = [queueIDs indexOfObject:currentTrackID];
-        if (foundIndex != NSNotFound) {
-            snapshotIndex = (NSInteger)foundIndex;
-        } else {
-            snapshotIndex = MIN(MAX(self.currentIndex, 0), (NSInteger)queueIDs.count - 1);
-        }
-    } else {
-        snapshotIndex = MIN(MAX(self.currentIndex, 0), (NSInteger)queueIDs.count - 1);
-        currentTrackID = queueIDs[(NSUInteger)snapshotIndex];
-    }
-
-    NSTimeInterval snapshotTime = self.audioPlayer != nil ? self.audioPlayer.currentTime : self.pendingResumeTime;
-    if (!isfinite(snapshotTime) || snapshotTime < 0.0) {
-        snapshotTime = 0.0;
-    }
-
-    NSDictionary<NSString *, id> *snapshot = @{
-        kPlaybackSnapshotQueueIDsKey: queueIDs,
-        kPlaybackSnapshotCurrentIndexKey: @(snapshotIndex),
-        kPlaybackSnapshotCurrentTrackIDKey: currentTrackID ?: @"",
-        kPlaybackSnapshotCurrentTimeKey: @(snapshotTime),
-        kPlaybackSnapshotRepeatModeKey: @(self.repeatMode),
-        kPlaybackSnapshotShuffleEnabledKey: @(self.isShuffleEnabled),
-        kPlaybackSnapshotWasPlayingKey: @(self.audioPlayer.isPlaying)
-    };
-    [defaults setObject:snapshot forKey:kPlaybackSnapshotDefaultsKey];
 }
 
 - (nullable M2Track *)currentTrack {
@@ -2636,7 +2373,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     [self resetAnalyticsSession];
     self.queue = [tracks copy];
     self.currentIndex = normalizedIndex;
-    self.pendingResumeTime = 0.0;
 
     [self.shuffleBag removeAllObjects];
     [self.shuffleHistory removeAllObjects];
@@ -2667,7 +2403,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         [self.audioPlayer play];
         [self startProgressTimerIfNeeded];
     }
-    self.pendingResumeTime = self.audioPlayer.currentTime;
 
     [self updateNowPlayingInfo];
     [self postStateDidChange];
@@ -2694,7 +2429,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
             [self.shuffleHistory removeLastObject];
             [self finalizeAnalyticsForCurrentTrackFinished:NO countSkipIfEarly:YES];
             self.currentIndex = previousIndex;
-            self.pendingResumeTime = 0.0;
             [self startCurrentTrack];
             return;
         }
@@ -2703,7 +2437,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         if (randomIndex != NSNotFound) {
             [self finalizeAnalyticsForCurrentTrackFinished:NO countSkipIfEarly:YES];
             self.currentIndex = randomIndex;
-            self.pendingResumeTime = 0.0;
             [self rebuildShuffleBagIfNeeded];
             [self startCurrentTrack];
             return;
@@ -2715,7 +2448,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     if (self.currentIndex == NSNotFound) {
         self.currentIndex = 0;
-        self.pendingResumeTime = 0.0;
         [self startCurrentTrack];
         return;
     }
@@ -2732,7 +2464,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     [self finalizeAnalyticsForCurrentTrackFinished:NO countSkipIfEarly:YES];
     self.currentIndex = previous;
-    self.pendingResumeTime = 0.0;
     [self startCurrentTrack];
 }
 
@@ -2745,10 +2476,8 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     NSTimeInterval clamped = MAX(0.0, MIN(time, self.audioPlayer.duration));
     [self markSeekForAnalyticsToTime:clamped];
     self.audioPlayer.currentTime = clamped;
-    self.pendingResumeTime = clamped;
 
     [self updateNowPlayingInfo];
-    [self persistPlaybackSnapshotForced:YES];
     [self postProgressDidChange];
 }
 
@@ -2854,7 +2583,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     [self finalizeAnalyticsForCurrentTrackFinished:automatic countSkipIfEarly:!automatic];
     self.currentIndex = nextIndex;
-    self.pendingResumeTime = 0.0;
     [self startCurrentTrack];
 }
 
@@ -2910,7 +2638,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     if (self.audioPlayer != nil) {
         self.audioPlayer.currentTime = 0.0;
-        self.pendingResumeTime = 0.0;
         [self.audioPlayer play];
         [self startProgressTimerIfNeeded];
         [self updateNowPlayingInfo];
@@ -2928,7 +2655,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     [self.audioPlayer stop];
     self.audioPlayer = nil;
-    self.pendingResumeTime = 0.0;
     [self resetAnalyticsSession];
 
     [self updateRemoteCommandAvailability];
@@ -3004,14 +2730,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     player.delegate = self;
     [player prepareToPlay];
-    NSTimeInterval resumeTime = self.pendingResumeTime;
-    if (isfinite(resumeTime) && resumeTime > 0.0) {
-        NSTimeInterval playerDuration = player.duration;
-        if (isfinite(playerDuration) && playerDuration > 0.0) {
-            resumeTime = MIN(resumeTime, playerDuration);
-        }
-        player.currentTime = MAX(0.0, resumeTime);
-    }
 
     if (![player play]) {
         NSLog(@"Playback start failed for %@", track.fileName);
@@ -3024,7 +2742,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     self.audioPlayer = player;
-    self.pendingResumeTime = self.audioPlayer.currentTime;
     [self beginAnalyticsSessionForCurrentTrack];
 
     [self startProgressTimerIfNeeded];
@@ -3035,7 +2752,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
 - (void)startProgressTimerIfNeeded {
     [self.progressTimer invalidate];
-    self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+    self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:0.4
                                                           target:self
                                                         selector:@selector(handleProgressTick)
                                                         userInfo:nil
@@ -3048,13 +2765,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     [self updateAnalyticsProgressSnapshot];
-    self.pendingResumeTime = self.audioPlayer.currentTime;
-    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
-    if (self.lastNowPlayingInfoUpdateTimestamp <= 0.0 ||
-        (now - self.lastNowPlayingInfoUpdateTimestamp) >= kNowPlayingTickUpdateInterval) {
-        [self updateNowPlayingInfo];
-    }
-    [self persistPlaybackSnapshotForced:NO];
+    [self updateNowPlayingInfo];
     [self postProgressDidChange];
 }
 
@@ -3149,7 +2860,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     M2Track *track = self.currentTrack;
     if (track == nil || self.audioPlayer == nil) {
         MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo = nil;
-        self.lastNowPlayingInfoUpdateTimestamp = CFAbsoluteTimeGetCurrent();
         return;
     }
 
@@ -3182,7 +2892,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     }
 
     MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo = info;
-    self.lastNowPlayingInfoUpdateTimestamp = CFAbsoluteTimeGetCurrent();
 }
 
 - (void)updateRemoteCommandAvailability {
@@ -3203,7 +2912,6 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
 - (void)postStateDidChange {
     [self updateRemoteCommandAvailability];
-    [self persistPlaybackSnapshotForced:NO];
     [NSNotificationCenter.defaultCenter postNotificationName:M2PlaybackStateDidChangeNotification object:self];
 }
 
@@ -3275,6 +2983,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
     self.timer = timer;
     dispatch_resume(timer);
 
+    M2SyncSleepLiveActivity(normalizedDuration);
     [self postDidChange];
 }
 
@@ -3285,6 +2994,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
 
     [self invalidateTimer];
     self.fireDate = nil;
+    M2EndSleepLiveActivity();
     [self postDidChange];
 }
 
@@ -3297,6 +3007,7 @@ static NSData *M2EncodedCoverData(UIImage *image) {
         [playback togglePlayPause];
     }
 
+    M2EndSleepLiveActivity();
     [self postDidChange];
 }
 

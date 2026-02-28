@@ -28,7 +28,6 @@ typedef NS_ENUM(NSInteger, M2RepeatMode) {
 
 - (NSURL *)musicDirectoryURL;
 - (NSString *)filesDropHint;
-- (BOOL)openMusicDirectoryWithCompletion:(void (^ _Nullable)(BOOL success))completion;
 - (NSArray<M2Track *> *)tracks;
 - (NSArray<M2Track *> *)reloadTracks;
 - (nullable M2Track *)trackForIdentifier:(NSString *)identifier;

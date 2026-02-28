@@ -20,7 +20,6 @@
     <nav id="site-nav" class="top-nav" data-site-nav aria-label="Primary">
       <a href="index.html" data-nav="index.html">Home</a>
       <a href="architecture.html" data-nav="architecture.html">Architecture</a>
-      <a href="desktop-catalyst.html" data-nav="desktop-catalyst.html">Desktop Catalyst</a>
       <a href="services-data.html" data-nav="services-data.html">Services & Data</a>
       <a href="build-ci.html" data-nav="build-ci.html">Build & CI</a>
     </nav>
@@ -36,7 +35,6 @@
         <a href="#navigation">Navigation Model</a>
         <a href="#modules">Module Boundaries</a>
         <a href="#notifications">Notification Contracts</a>
-        <a href="#desktop-shell">Desktop Shell</a>
         <a href="#sequence">Runtime Sequence</a>
       </nav>
     </aside>
@@ -65,7 +63,6 @@
           <tbody>
             <tr>
               <td><code>M2</code></td>
-              <td>Main app: playback, library, playlists, favorites, desktop shell.</td>
               <td>Objective-C + Swift bridge</td>
             </tr>
             <tr>
@@ -91,7 +88,6 @@ SceneDelegate
 
 ViewController
   -> build tabs (Music / Playlists / Favorites)
-  -> build desktop sidebar + mini-player for Catalyst
   -> sync shell with playback notifications</code></pre>
       </section>
 
@@ -100,7 +96,6 @@ ViewController
         <ul>
           <li><code>ViewController</code> is a <code>UITabBarController</code> root.</li>
           <li>Each tab is wrapped in its own <code>UINavigationController</code>.</li>
-          <li>Mobile uses tab bar; Catalyst hides tab bar and drives tab switching from left sidebar.</li>
           <li>Player screen is pushed from track selection or mini-player open action.</li>
         </ul>
       </section>
@@ -121,11 +116,9 @@ ViewController
             </tr>
             <tr>
               <td><code>M2MusicModule.*</code></td>
-              <td>Feature view controllers, list/grid presentation, desktop-specific feature pages.</td>
             </tr>
             <tr>
               <td><code>ViewController.*</code></td>
-              <td>Application shell, desktop sidebar, mini-player, keyboard shortcuts, tab coordination.</td>
             </tr>
             <tr>
               <td><code>M2Cells.*</code></td>
@@ -150,12 +143,7 @@ ViewController
         </ul>
       </section>
 
-      <section id="desktop-shell" class="card section">
-        <h2>Desktop Shell Behavior</h2>
         <ul>
-          <li>Catalyst shell enforces dark visual style and a fixed left sidebar.</li>
-          <li>Mini-player is always present in desktop layout.</li>
-          <li>Tab transitions and navigation pushes are configured without animation on desktop feature flows.</li>
           <li>Pinned playlists are managed in sidebar and open directly into playlist details.</li>
         </ul>
       </section>

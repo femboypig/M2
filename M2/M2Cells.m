@@ -4,15 +4,6 @@
 //
 
 #import "M2Cells.h"
-#import <TargetConditionals.h>
-
-static BOOL M2CellsIsMacCatalyst(void) {
-#if TARGET_OS_MACCATALYST
-    return YES;
-#else
-    return NO;
-#endif
-}
 
 @interface M2TrackCell ()
 
@@ -33,17 +24,14 @@ static BOOL M2CellsIsMacCatalyst(void) {
 }
 
 - (void)setupUI {
-    BOOL desktop = M2CellsIsMacCatalyst();
     self.selectionStyle = UITableViewCellSelectionStyleDefault;
     self.preservesSuperviewLayoutMargins = NO;
-    self.separatorInset = desktop ? UIEdgeInsetsMake(0.0, CGFLOAT_MAX, 0.0, 0.0)
-                                  : UIEdgeInsetsMake(0.0, 60.0, 0.0, 12.0);
+    self.separatorInset = UIEdgeInsetsMake(0.0, 60.0, 0.0, 12.0);
     self.layoutMargins = UIEdgeInsetsZero;
-    self.backgroundColor = UIColor.clearColor;
 
     UIImageView *coverView = [[UIImageView alloc] init];
     coverView.translatesAutoresizingMaskIntoConstraints = NO;
-    coverView.layer.cornerRadius = desktop ? 8.0 : 0.0;
+    coverView.layer.cornerRadius = 0.0;
     coverView.layer.masksToBounds = YES;
     coverView.contentMode = UIViewContentModeScaleAspectFill;
     self.coverView = coverView;
@@ -65,15 +53,13 @@ static BOOL M2CellsIsMacCatalyst(void) {
     [self.contentView addSubview:titleLabel];
     [self.contentView addSubview:durationLabel];
 
-    CGFloat horizontalInset = desktop ? 16.0 : 12.0;
-    CGFloat coverSize = desktop ? 42.0 : 40.0;
     [NSLayoutConstraint activateConstraints:@[
-        [coverView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:horizontalInset],
+        [coverView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12.0],
         [coverView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [coverView.widthAnchor constraintEqualToConstant:coverSize],
-        [coverView.heightAnchor constraintEqualToConstant:coverSize],
+        [coverView.widthAnchor constraintEqualToConstant:40.0],
+        [coverView.heightAnchor constraintEqualToConstant:40.0],
 
-        [durationLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-(desktop ? 16.0 : 12.0)],
+        [durationLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12.0],
         [durationLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
         [durationLabel.widthAnchor constraintGreaterThanOrEqualToConstant:44.0],
 
@@ -90,23 +76,8 @@ static BOOL M2CellsIsMacCatalyst(void) {
 - (void)configureWithTrack:(M2Track *)track
                  isCurrent:(BOOL)isCurrent
     showsPlaybackIndicator:(BOOL)showsPlaybackIndicator {
-    BOOL desktop = M2CellsIsMacCatalyst();
     self.titleLabel.text = track.title;
     self.durationLabel.text = M2FormatDuration(track.duration);
-
-    if (desktop) {
-        self.contentView.layer.cornerRadius = 12.0;
-        self.contentView.layer.masksToBounds = YES;
-        self.contentView.backgroundColor = isCurrent
-        ? [UIColor colorWithRed:1.0 green:0.83 blue:0.08 alpha:0.18]
-        : [UIColor colorWithWhite:1.0 alpha:0.045];
-        self.contentView.layer.borderWidth = 1.0;
-        self.contentView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:(isCurrent ? 0.24 : 0.08)].CGColor;
-    } else {
-        self.contentView.layer.cornerRadius = 0.0;
-        self.contentView.layer.borderWidth = 0.0;
-        self.contentView.backgroundColor = UIColor.clearColor;
-    }
 
     if (showsPlaybackIndicator && isCurrent) {
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:17.0
@@ -149,17 +120,14 @@ static BOOL M2CellsIsMacCatalyst(void) {
 }
 
 - (void)setupUI {
-    BOOL desktop = M2CellsIsMacCatalyst();
     self.selectionStyle = UITableViewCellSelectionStyleDefault;
     self.preservesSuperviewLayoutMargins = NO;
-    self.separatorInset = desktop ? UIEdgeInsetsMake(0.0, CGFLOAT_MAX, 0.0, 0.0)
-                                  : UIEdgeInsetsMake(0.0, 62.0, 0.0, 12.0);
+    self.separatorInset = UIEdgeInsetsMake(0.0, 62.0, 0.0, 12.0);
     self.layoutMargins = UIEdgeInsetsZero;
-    self.backgroundColor = UIColor.clearColor;
 
     UIImageView *coverView = [[UIImageView alloc] init];
     coverView.translatesAutoresizingMaskIntoConstraints = NO;
-    coverView.layer.cornerRadius = desktop ? 9.0 : 0.0;
+    coverView.layer.cornerRadius = 0.0;
     coverView.layer.masksToBounds = YES;
     coverView.contentMode = UIViewContentModeScaleAspectFill;
     self.coverView = coverView;
@@ -188,16 +156,14 @@ static BOOL M2CellsIsMacCatalyst(void) {
     self.nameTopConstraint = nameTopConstraint;
     self.nameCenterYConstraint = nameCenterYConstraint;
 
-    CGFloat horizontalInset = desktop ? 16.0 : 12.0;
-    CGFloat coverSize = desktop ? 44.0 : 42.0;
     [NSLayoutConstraint activateConstraints:@[
-        [coverView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:horizontalInset],
+        [coverView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12.0],
         [coverView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [coverView.widthAnchor constraintEqualToConstant:coverSize],
-        [coverView.heightAnchor constraintEqualToConstant:coverSize],
+        [coverView.widthAnchor constraintEqualToConstant:42.0],
+        [coverView.heightAnchor constraintEqualToConstant:42.0],
 
         [nameLabel.leadingAnchor constraintEqualToAnchor:coverView.trailingAnchor constant:10.0],
-        [nameLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-(desktop ? 16.0 : 12.0)],
+        [nameLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12.0],
         nameTopConstraint,
         nameCenterYConstraint,
 
@@ -208,18 +174,6 @@ static BOOL M2CellsIsMacCatalyst(void) {
 }
 
 - (void)configureWithName:(NSString *)name subtitle:(NSString *)subtitle artwork:(UIImage *)artwork {
-    if (M2CellsIsMacCatalyst()) {
-        self.contentView.layer.cornerRadius = 12.0;
-        self.contentView.layer.masksToBounds = YES;
-        self.contentView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.045];
-        self.contentView.layer.borderWidth = 1.0;
-        self.contentView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.08].CGColor;
-    } else {
-        self.contentView.layer.cornerRadius = 0.0;
-        self.contentView.layer.borderWidth = 0.0;
-        self.contentView.backgroundColor = UIColor.clearColor;
-    }
-
     self.nameLabel.text = name;
     BOOL hasSubtitle = (subtitle.length > 0);
     self.subtitleLabel.text = hasSubtitle ? subtitle : @"";

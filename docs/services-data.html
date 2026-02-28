@@ -20,7 +20,6 @@
     <nav id="site-nav" class="top-nav" data-site-nav aria-label="Primary">
       <a href="index.html" data-nav="index.html">Home</a>
       <a href="architecture.html" data-nav="architecture.html">Architecture</a>
-      <a href="desktop-catalyst.html" data-nav="desktop-catalyst.html">Desktop Catalyst</a>
       <a href="services-data.html" data-nav="services-data.html">Services & Data</a>
       <a href="build-ci.html" data-nav="build-ci.html">Build & CI</a>
     </nav>
@@ -96,7 +95,6 @@
         <ul>
           <li>Playlist identifiers are stable and persisted.</li>
           <li>Cover resolution order: custom cover -> collage from tracks -> placeholder artwork.</li>
-          <li>Desktop pinning references playlist identifiers, not index positions.</li>
           <li>"Lovely songs" playlist is auto-maintained from analytics heuristics.</li>
         </ul>
       </section>
@@ -106,7 +104,6 @@
         <ul>
           <li>Favorites are persisted as normalized track identifiers.</li>
           <li>Favorites view resolves current library snapshot each reload.</li>
-          <li>Desktop favorites page projects filtered set into 2 visual columns.</li>
         </ul>
       </section>
 
@@ -143,9 +140,7 @@ Outputs:
               <td><code>m2_favorites_v1</code></td>
             </tr>
             <tr>
-              <td>Desktop pinned playlists</td>
               <td>NSUserDefaults</td>
-              <td><code>m2_desktop_pinned_playlists_v1</code></td>
             </tr>
             <tr>
               <td>Playlists backup</td>
@@ -179,8 +174,6 @@ Outputs:
           <li><code>M2PlaylistsDidChangeNotification</code></li>
           <li><code>M2FavoritesDidChangeNotification</code></li>
           <li><code>M2SleepTimerDidChangeNotification</code></li>
-          <li><code>M2DesktopPinPlaylistNotification</code></li>
-          <li><code>M2DesktopOpenPlaylistRequestNotification</code></li>
         </ul>
       </section>
 
