@@ -3598,6 +3598,11 @@ replacementString:(NSString *)string {
 }
 - (void)refreshNavigationItemsForPlaylistSelectionState {
     if (self.multiSelectMode) {
+        NSString *displayTitle = [NSString stringWithFormat:@"%lu Selected", (unsigned long)self.selectedTrackIDs.count];
+        self.navigationItem.title = nil;
+        self.navigationItem.titleView = nil;
+        self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraWhiteSectionTitleLabel(displayTitle)];
+
         UIBarButtonItem *cancelItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"xmark"]
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
@@ -3611,9 +3616,14 @@ replacementString:(NSString *)string {
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(removeSelectedPlaylistTracksTapped)];
-        self.navigationItem.rightBarButtonItems = @[cancelItem, deleteItem, favoriteItem];
+        UIBarButtonItem *tightSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace
+                                                                                      target:nil
+                                                                                      action:nil];
+        tightSpace.width = -8.0;
+        self.navigationItem.rightBarButtonItems = @[cancelItem, deleteItem, tightSpace, favoriteItem];
         return;
     }
+    self.navigationItem.leftBarButtonItem = nil;
     [self updateOptionsButtonVisibility];
 }
 
@@ -4064,7 +4074,7 @@ replacementString:(NSString *)string {
 - (void)updateNavigationTitleVisibility {
     if (self.multiSelectMode) {
         self.navigationItem.titleView = nil;
-        self.navigationItem.title = [NSString stringWithFormat:@"%lu Selected", (unsigned long)self.selectedTrackIDs.count];
+        self.navigationItem.title = nil;
         self.compactTitleVisible = YES;
         return;
     }
