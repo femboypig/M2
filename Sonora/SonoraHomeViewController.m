@@ -46,6 +46,25 @@ static UIFont *SonoraNotoSerifBoldFont(CGFloat size) {
     return [UIFont systemFontOfSize:size weight:UIFontWeightBold];
 }
 
+static UIView *SonoraHomeNavigationTitleView(NSString *text) {
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.text = text;
+    titleLabel.textColor = UIColor.labelColor;
+    titleLabel.font = SonoraYSMusicFont(30.0);
+    [titleLabel sizeToFit];
+
+    if (@available(iOS 26.0, *)) {
+        CGFloat horizontalPadding = 10.0;
+        CGFloat width = ceil(CGRectGetWidth(titleLabel.bounds)) + (horizontalPadding * 2.0);
+        CGFloat height = ceil(CGRectGetHeight(titleLabel.bounds));
+        UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, width, height)];
+        titleLabel.frame = CGRectMake(horizontalPadding, 0.0, ceil(CGRectGetWidth(titleLabel.bounds)), height);
+        [container addSubview:titleLabel];
+        return container;
+    }
+    return titleLabel;
+}
+
 static NSString * const SonoraSettingsAccentHexKey = @"sonora.settings.accentHex";
 static NSString * const SonoraSettingsLegacyAccentColorKey = @"sonora.settings.accentColor";
 
@@ -144,6 +163,26 @@ static UIColor *SonoraBlendColor(UIColor *from, UIColor *to, CGFloat ratio) {
                            green:(fg + ((tg - fg) * ratio))
                             blue:(fb + ((tb - fb) * ratio))
                            alpha:(fa + ((ta - fa) * ratio))];
+}
+
+static NSString *SonoraHomeStableHashString(NSString *value) {
+    if (value.length == 0) {
+        return @"0";
+    }
+
+    NSData *data = [value dataUsingEncoding:NSUTF8StringEncoding];
+    if (data.length == 0) {
+        return @"0";
+    }
+
+    const uint8_t *bytes = data.bytes;
+    uint64_t hash = 1469598103934665603ULL;
+    for (NSUInteger index = 0; index < data.length; index += 1) {
+        hash ^= bytes[index];
+        hash *= 1099511628211ULL;
+    }
+
+    return [NSString stringWithFormat:@"%016llx", hash];
 }
 
 static NSArray<UIColor *> *SonoraWavePaletteFromImage(UIImage *image) {
@@ -1648,10 +1687,14 @@ static NSString * const SonoraSettingsArtworkEqualizerKey = @"sonora.settings.sh
 static NSString * const SonoraSettingsTrackGapKey = @"sonora.settings.trackGapSeconds";
 static NSString * const SonoraSettingsMaxStorageMBKey = @"sonora.settings.maxStorageMB";
 static NSString * const SonoraSettingsPreservePlayerModesKey = @"sonora.settings.preservePlayerModes";
+static NSString * const SonoraBackupArchiveMagicString = @"SONORAAR";
+static NSString * const SonoraBackupManifestEntryName = @"meta/manifest.v1";
+static NSString * const SonoraBackupArchiveErrorDomain = @"SonoraBackupArchive";
+static NSInteger const SonoraBackupArchiveVersion = 1;
 static NSString * const SonoraSettingsGitHubURLString = @"https://github.com/femboypig/Sonora";
 static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 
-@interface SonoraSettingsViewController : UIViewController <UIColorPickerViewControllerDelegate>
+@interface SonoraSettingsViewController : UIViewController <UIColorPickerViewControllerDelegate, UIDocumentPickerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *fontControl;
 @property (nonatomic, strong) UISegmentedControl *artworkStyleControl;
@@ -1661,6 +1704,8 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 @property (nonatomic, strong) UILabel *trackGapValueLabel;
 @property (nonatomic, strong) UILabel *usedStorageValueLabel;
 @property (nonatomic, strong) UILabel *maxStorageValueLabel;
+@property (nonatomic, strong, nullable) NSURL *pendingBackupExportURL;
+@property (nonatomic, assign) BOOL backupPickerImportMode;
 
 @end
 
@@ -1773,6 +1818,23 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [memoryStack addArrangedSubview:[self switchRowWithTitle:@"Preserve player settings"
                                                     subtitle:@"Keep shuffle/repeat after app restart"
                                                      control:preservePlayerModesSwitch]];
+
+    [contentStack addArrangedSubview:[self sectionHeadingWithText:@"Backup"]];
+    UIStackView *backupStack = [self addSectionCardToStack:contentStack];
+
+    UILabel *exportValueLabel = [self valueLabel];
+    exportValueLabel.text = @"Create archive";
+    [backupStack addArrangedSubview:[self selectableValueRowWithTitle:@"Export backup"
+                                                              subtitle:@"Songs, playlists, favorites, settings"
+                                                            valueLabel:exportValueLabel
+                                                                action:@selector(exportBackupTapped)]];
+
+    UILabel *importValueLabel = [self valueLabel];
+    importValueLabel.text = @"Restore archive";
+    [backupStack addArrangedSubview:[self selectableValueRowWithTitle:@"Import backup"
+                                                              subtitle:@"Replace local data from archive"
+                                                            valueLabel:importValueLabel
+                                                                action:@selector(importBackupTapped)]];
 
     [contentStack addArrangedSubview:[self sectionHeadingWithText:@"About"]];
     UIStackView *aboutStack = [self addSectionCardToStack:contentStack];
@@ -2408,6 +2470,721 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
 }
 
+- (void)exportBackupTapped {
+    NSError *archiveError = nil;
+    NSData *archiveData = [self backupArchiveDataWithError:&archiveError];
+    if (archiveData.length == 0) {
+        [self presentBackupErrorMessage:(archiveError.localizedDescription ?: @"Could not create backup archive.")];
+        return;
+    }
+
+    NSString *fileName = [self backupArchiveFileName];
+    NSString *temporaryPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    NSURL *temporaryURL = [NSURL fileURLWithPath:temporaryPath];
+    NSError *writeError = nil;
+    [archiveData writeToURL:temporaryURL options:NSDataWritingAtomic error:&writeError];
+    if (writeError != nil) {
+        [self presentBackupErrorMessage:(writeError.localizedDescription ?: @"Could not prepare backup file.")];
+        return;
+    }
+
+    UIDocumentPickerViewController *picker = nil;
+    if (@available(iOS 14.0, *)) {
+        picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[temporaryURL] asCopy:YES];
+    } else {
+        picker = [[UIDocumentPickerViewController alloc] initWithURL:temporaryURL inMode:UIDocumentPickerModeExportToService];
+    }
+    picker.delegate = self;
+    picker.modalPresentationStyle = UIModalPresentationFormSheet;
+    self.pendingBackupExportURL = temporaryURL;
+    self.backupPickerImportMode = NO;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)importBackupTapped {
+    UIDocumentPickerViewController *picker =
+    [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.data"]
+                                                           inMode:UIDocumentPickerModeImport];
+    picker.delegate = self;
+    picker.modalPresentationStyle = UIModalPresentationFormSheet;
+    self.backupPickerImportMode = YES;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    (void)controller;
+    NSURL *selectedURL = urls.firstObject;
+    if (selectedURL == nil) {
+        [self cleanupPendingBackupExportFile];
+        self.backupPickerImportMode = NO;
+        return;
+    }
+
+    if (self.backupPickerImportMode) {
+        BOOL hasScope = [selectedURL startAccessingSecurityScopedResource];
+        NSError *importError = nil;
+        BOOL imported = [self importBackupArchiveFromURL:selectedURL error:&importError];
+        if (hasScope) {
+            [selectedURL stopAccessingSecurityScopedResource];
+        }
+
+        if (imported) {
+            [self presentBackupInfoMessage:@"Backup archive imported successfully."];
+        } else {
+            [self presentBackupErrorMessage:(importError.localizedDescription ?: @"Could not import backup archive.")];
+        }
+    } else {
+        [self presentBackupInfoMessage:@"Backup archive exported."];
+    }
+
+    [self cleanupPendingBackupExportFile];
+    self.backupPickerImportMode = NO;
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    (void)controller;
+    [self cleanupPendingBackupExportFile];
+    self.backupPickerImportMode = NO;
+}
+
+- (void)cleanupPendingBackupExportFile {
+    if (self.pendingBackupExportURL != nil) {
+        [NSFileManager.defaultManager removeItemAtURL:self.pendingBackupExportURL error:nil];
+        self.pendingBackupExportURL = nil;
+    }
+}
+
+- (void)presentBackupInfoMessage:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Backup"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentBackupErrorMessage:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Backup Error"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (NSString *)backupArchiveFileName {
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    formatter.dateFormat = @"yyyyMMdd_HHmmss";
+    NSString *suffix = [formatter stringFromDate:[NSDate date]] ?: @"backup";
+    return [NSString stringWithFormat:@"sonora_backup_%@.sonoraarc", suffix];
+}
+
+- (NSError *)backupErrorWithCode:(NSInteger)code description:(NSString *)description {
+    NSString *resolved = description.length > 0 ? description : @"Backup error.";
+    return [NSError errorWithDomain:SonoraBackupArchiveErrorDomain
+                               code:code
+                           userInfo:@{NSLocalizedDescriptionKey: resolved}];
+}
+
+- (NSString *)safeTokenFromString:(NSString *)raw fallback:(NSString *)fallback {
+    NSString *source = [raw isKindOfClass:NSString.class] ? raw : @"";
+    if (source.length == 0) {
+        source = fallback.length > 0 ? fallback : @"item";
+    }
+    NSMutableString *result = [NSMutableString stringWithCapacity:source.length];
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"];
+    for (NSUInteger idx = 0; idx < source.length; idx += 1) {
+        unichar ch = [source characterAtIndex:idx];
+        if ([allowed characterIsMember:ch]) {
+            [result appendFormat:@"%C", ch];
+        } else {
+            [result appendString:@"_"];
+        }
+    }
+    NSString *normalized = [[result copy] lowercaseString];
+    if (normalized.length == 0) {
+        return [NSString stringWithFormat:@"%@_%@", fallback ?: @"item", NSUUID.UUID.UUIDString.lowercaseString];
+    }
+    return normalized;
+}
+
+- (NSString *)safeExtensionFromString:(NSString *)raw fallback:(NSString *)fallback {
+    NSString *source = [raw isKindOfClass:NSString.class] ? raw.lowercaseString : @"";
+    NSMutableString *result = [NSMutableString stringWithCapacity:source.length];
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyz0123456789"];
+    for (NSUInteger idx = 0; idx < source.length; idx += 1) {
+        unichar ch = [source characterAtIndex:idx];
+        if ([allowed characterIsMember:ch]) {
+            [result appendFormat:@"%C", ch];
+        }
+    }
+    if (result.length == 0) {
+        [result appendString:(fallback.length > 0 ? fallback : @"bin")];
+    }
+    return [result copy];
+}
+
+- (NSString *)uniqueFileNameInDirectoryURL:(NSURL *)directoryURL preferredName:(NSString *)preferredName {
+    NSString *baseName = [preferredName.stringByDeletingPathExtension stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *extension = [self safeExtensionFromString:preferredName.pathExtension fallback:@"bin"];
+    if (baseName.length == 0) {
+        baseName = @"track";
+    }
+    baseName = [self safeTokenFromString:baseName fallback:@"track"];
+
+    NSString *candidate = [NSString stringWithFormat:@"%@.%@", baseName, extension];
+    NSUInteger index = 1;
+    while ([NSFileManager.defaultManager fileExistsAtPath:[directoryURL URLByAppendingPathComponent:candidate].path]) {
+        candidate = [NSString stringWithFormat:@"%@_%lu.%@", baseName, (unsigned long)index, extension];
+        index += 1;
+    }
+    return candidate;
+}
+
+- (void)appendUInt32:(uint32_t)value toData:(NSMutableData *)data {
+    uint32_t bigEndian = CFSwapInt32HostToBig(value);
+    [data appendBytes:&bigEndian length:sizeof(uint32_t)];
+}
+
+- (void)appendUInt64:(uint64_t)value toData:(NSMutableData *)data {
+    uint64_t bigEndian = CFSwapInt64HostToBig(value);
+    [data appendBytes:&bigEndian length:sizeof(uint64_t)];
+}
+
+- (BOOL)readUInt32:(uint32_t *)value fromData:(NSData *)data offset:(NSUInteger *)offset {
+    if (value == NULL || data == nil || offset == NULL) {
+        return NO;
+    }
+    if ((*offset + sizeof(uint32_t)) > data.length) {
+        return NO;
+    }
+    uint32_t rawValue = 0;
+    [data getBytes:&rawValue range:NSMakeRange(*offset, sizeof(uint32_t))];
+    *offset += sizeof(uint32_t);
+    *value = CFSwapInt32BigToHost(rawValue);
+    return YES;
+}
+
+- (BOOL)readUInt64:(uint64_t *)value fromData:(NSData *)data offset:(NSUInteger *)offset {
+    if (value == NULL || data == nil || offset == NULL) {
+        return NO;
+    }
+    if ((*offset + sizeof(uint64_t)) > data.length) {
+        return NO;
+    }
+    uint64_t rawValue = 0;
+    [data getBytes:&rawValue range:NSMakeRange(*offset, sizeof(uint64_t))];
+    *offset += sizeof(uint64_t);
+    *value = CFSwapInt64BigToHost(rawValue);
+    return YES;
+}
+
+- (nullable NSDictionary<NSString *, NSData *> *)parseArchiveEntriesFromData:(NSData *)data error:(NSError **)error {
+    NSData *magicData = [SonoraBackupArchiveMagicString dataUsingEncoding:NSASCIIStringEncoding];
+    if (magicData.length == 0 || data.length < (magicData.length + sizeof(uint32_t) + sizeof(uint32_t))) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:100 description:@"Invalid backup archive file."];
+        }
+        return nil;
+    }
+
+    NSData *receivedMagic = [data subdataWithRange:NSMakeRange(0, magicData.length)];
+    if (![receivedMagic isEqualToData:magicData]) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:101 description:@"Backup archive header mismatch."];
+        }
+        return nil;
+    }
+
+    NSUInteger offset = magicData.length;
+    uint32_t version = 0;
+    uint32_t entryCount = 0;
+    if (![self readUInt32:&version fromData:data offset:&offset] ||
+        ![self readUInt32:&entryCount fromData:data offset:&offset]) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:102 description:@"Backup archive is corrupted."];
+        }
+        return nil;
+    }
+    if ((NSInteger)version != SonoraBackupArchiveVersion) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:103 description:@"Unsupported backup archive version."];
+        }
+        return nil;
+    }
+    if (entryCount == 0) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:104 description:@"Backup archive has no entries."];
+        }
+        return nil;
+    }
+
+    NSMutableDictionary<NSString *, NSData *> *entries = [NSMutableDictionary dictionaryWithCapacity:entryCount];
+    for (uint32_t idx = 0; idx < entryCount; idx += 1) {
+        uint32_t nameLength = 0;
+        if (![self readUInt32:&nameLength fromData:data offset:&offset] || nameLength == 0 || nameLength > 2048) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:105 description:@"Backup entry name is invalid."];
+            }
+            return nil;
+        }
+        if ((offset + nameLength) > data.length) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:106 description:@"Backup entry exceeds archive bounds."];
+            }
+            return nil;
+        }
+        NSData *nameData = [data subdataWithRange:NSMakeRange(offset, nameLength)];
+        offset += nameLength;
+        NSString *name = [[NSString alloc] initWithData:nameData encoding:NSUTF8StringEncoding];
+        if (name.length == 0) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:107 description:@"Backup entry name cannot be decoded."];
+            }
+            return nil;
+        }
+
+        uint64_t payloadLength = 0;
+        if (![self readUInt64:&payloadLength fromData:data offset:&offset]) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:108 description:@"Backup entry payload is corrupted."];
+            }
+            return nil;
+        }
+        if (payloadLength > (uint64_t)(data.length - offset)) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:109 description:@"Backup entry payload exceeds archive bounds."];
+            }
+            return nil;
+        }
+        NSData *payload = [data subdataWithRange:NSMakeRange(offset, (NSUInteger)payloadLength)];
+        offset += (NSUInteger)payloadLength;
+        entries[name] = payload;
+    }
+
+    return [entries copy];
+}
+
+- (nullable NSData *)backupArchiveDataWithError:(NSError **)error {
+    SonoraLibraryManager *library = SonoraLibraryManager.sharedManager;
+    NSArray<SonoraTrack *> *tracks = library.tracks;
+    if (tracks.count == 0) {
+        tracks = [library reloadTracks];
+    }
+    SonoraPlaylistStore *playlistStore = SonoraPlaylistStore.sharedStore;
+    NSArray<SonoraPlaylist *> *playlists = playlistStore.playlists ?: @[];
+    NSSet<NSString *> *favoriteSourceIDs = [NSSet setWithArray:SonoraFavoritesStore.sharedStore.favoriteTrackIDs ?: @[]];
+
+    NSMutableDictionary<NSString *, NSData *> *entryDataByName = [NSMutableDictionary dictionary];
+    NSMutableArray<NSDictionary<NSString *, id> *> *manifestTracks = [NSMutableArray array];
+    NSMutableArray<NSDictionary<NSString *, id> *> *manifestPlaylists = [NSMutableArray array];
+    NSMutableOrderedSet<NSString *> *favoriteBackupIDs = [NSMutableOrderedSet orderedSet];
+    NSMutableDictionary<NSString *, NSString *> *backupIDByTrackID = [NSMutableDictionary dictionary];
+    NSMutableSet<NSString *> *usedTrackBackupIDs = [NSMutableSet set];
+
+    NSUInteger trackIndex = 0;
+    for (SonoraTrack *track in tracks) {
+        NSURL *sourceURL = track.url;
+        if (sourceURL == nil) {
+            continue;
+        }
+        NSData *audioData = [NSData dataWithContentsOfURL:sourceURL options:0 error:nil];
+        if (audioData.length == 0) {
+            continue;
+        }
+
+        NSString *seed = track.identifier.length > 0 ? track.identifier : NSUUID.UUID.UUIDString;
+        NSString *hash = SonoraHomeStableHashString(seed);
+        if (hash.length > 8) {
+            hash = [hash substringToIndex:8];
+        }
+        NSString *baseBackupID = [self safeTokenFromString:[NSString stringWithFormat:@"t%04lu_%@", (unsigned long)trackIndex, hash]
+                                                   fallback:@"track"];
+        NSString *backupID = baseBackupID;
+        NSUInteger suffix = 1;
+        while ([usedTrackBackupIDs containsObject:backupID]) {
+            backupID = [NSString stringWithFormat:@"%@_%lu", baseBackupID, (unsigned long)suffix];
+            suffix += 1;
+        }
+        [usedTrackBackupIDs addObject:backupID];
+
+        NSString *extension = [self safeExtensionFromString:sourceURL.pathExtension fallback:@"bin"];
+        NSString *songEntry = [NSString stringWithFormat:@"songs/%@.%@", backupID, extension];
+        entryDataByName[songEntry] = audioData;
+
+        if (track.identifier.length > 0) {
+            backupIDByTrackID[track.identifier] = backupID;
+        }
+
+        BOOL isFavorite = (track.identifier.length > 0 && [favoriteSourceIDs containsObject:track.identifier]);
+        if (isFavorite) {
+            [favoriteBackupIDs addObject:backupID];
+        }
+
+        [manifestTracks addObject:@{
+            @"id": backupID,
+            @"title": (track.title ?: @""),
+            @"artist": (track.artist ?: @""),
+            @"durationMs": @((long long)llround(MAX(0.0, track.duration) * 1000.0)),
+            @"addedAt": @0,
+            @"songEntry": songEntry,
+            @"isFavorite": @(isFavorite)
+        }];
+        trackIndex += 1;
+    }
+
+    NSMutableSet<NSString *> *usedPlaylistBackupIDs = [NSMutableSet set];
+    NSURL *documentsURL = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+    NSURL *coversDirectoryURL = [documentsURL URLByAppendingPathComponent:@"PlaylistCovers" isDirectory:YES];
+    for (SonoraPlaylist *playlist in playlists) {
+        NSString *basePlaylistID = [self safeTokenFromString:playlist.playlistID fallback:@"playlist"];
+        NSString *backupPlaylistID = basePlaylistID;
+        NSUInteger suffix = 1;
+        while ([usedPlaylistBackupIDs containsObject:backupPlaylistID]) {
+            backupPlaylistID = [NSString stringWithFormat:@"%@_%lu", basePlaylistID, (unsigned long)suffix];
+            suffix += 1;
+        }
+        [usedPlaylistBackupIDs addObject:backupPlaylistID];
+
+        NSMutableOrderedSet<NSString *> *mappedTrackIDs = [NSMutableOrderedSet orderedSet];
+        for (NSString *sourceTrackID in playlist.trackIDs ?: @[]) {
+            NSString *mapped = backupIDByTrackID[sourceTrackID];
+            if (mapped.length > 0) {
+                [mappedTrackIDs addObject:mapped];
+            }
+        }
+
+        NSString *coverEntry = nil;
+        if (playlist.customCoverFileName.length > 0) {
+            NSURL *coverURL = [coversDirectoryURL URLByAppendingPathComponent:playlist.customCoverFileName];
+            NSData *coverData = [NSData dataWithContentsOfURL:coverURL options:0 error:nil];
+            if (coverData.length > 0) {
+                NSString *coverExtension = [self safeExtensionFromString:coverURL.pathExtension fallback:@"png"];
+                coverEntry = [NSString stringWithFormat:@"playlist_covers/%@.%@", backupPlaylistID, coverExtension];
+                entryDataByName[coverEntry] = coverData;
+            }
+        }
+
+        NSMutableDictionary<NSString *, id> *manifestPlaylist = [@{
+            @"id": backupPlaylistID,
+            @"name": (playlist.name ?: @"Playlist"),
+            @"trackIds": mappedTrackIDs.array ?: @[],
+            @"createdAt": @0
+        } mutableCopy];
+        if (coverEntry.length > 0) {
+            manifestPlaylist[@"coverEntry"] = coverEntry;
+        }
+        [manifestPlaylists addObject:[manifestPlaylist copy]];
+    }
+
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger fontValue = [defaults objectForKey:SonoraSettingsFontKey] ? [defaults integerForKey:SonoraSettingsFontKey] : 0;
+    NSInteger artworkStyleValue = [defaults objectForKey:SonoraSettingsArtworkStyleKey] ? [defaults integerForKey:SonoraSettingsArtworkStyleKey] : 1;
+    BOOL artworkEqualizer = [defaults objectForKey:SonoraSettingsArtworkEqualizerKey] ? [defaults boolForKey:SonoraSettingsArtworkEqualizerKey] : YES;
+    BOOL preserveModes = [defaults objectForKey:SonoraSettingsPreservePlayerModesKey] ? [defaults boolForKey:SonoraSettingsPreservePlayerModesKey] : YES;
+    double trackGap = [defaults objectForKey:SonoraSettingsTrackGapKey] ? [defaults doubleForKey:SonoraSettingsTrackGapKey] : 0.0;
+    NSInteger maxStorageMb = [defaults objectForKey:SonoraSettingsMaxStorageMBKey] ? [defaults integerForKey:SonoraSettingsMaxStorageMBKey] : -1;
+
+    NSDictionary<NSString *, id> *settings = @{
+        @"fontStyle": (fontValue == 1 ? @"serif" : @"system"),
+        @"artworkStyle": (artworkStyleValue == 0 ? @"square" : @"rounded"),
+        @"accentHex": [self hexStringForColor:[self currentAccentColor]],
+        @"preservePlayerModes": @(preserveModes),
+        @"trackGapSeconds": @(trackGap),
+        @"maxStorageMb": @(maxStorageMb),
+        @"artworkEqualizer": @(artworkEqualizer)
+    };
+
+    NSDictionary<NSString *, id> *manifest = @{
+        @"format": @"sonora-archive",
+        @"version": @(SonoraBackupArchiveVersion),
+        @"exportedAt": @((long long)llround([NSDate date].timeIntervalSince1970 * 1000.0)),
+        @"tracks": manifestTracks,
+        @"playlists": manifestPlaylists,
+        @"favorites": favoriteBackupIDs.array ?: @[],
+        @"settings": settings
+    };
+    NSError *jsonError = nil;
+    NSData *manifestData = [NSJSONSerialization dataWithJSONObject:manifest options:0 error:&jsonError];
+    if (jsonError != nil || manifestData.length == 0) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:200 description:(jsonError.localizedDescription ?: @"Could not encode backup manifest.")];
+        }
+        return nil;
+    }
+
+    NSMutableArray<NSDictionary<NSString *, id> *> *orderedEntries = [NSMutableArray array];
+    [orderedEntries addObject:@{
+        @"name": SonoraBackupManifestEntryName,
+        @"data": manifestData
+    }];
+
+    NSArray<NSString *> *sortedNames = [[entryDataByName allKeys] sortedArrayUsingSelector:@selector(compare:)];
+    for (NSString *entryName in sortedNames) {
+        NSData *entryData = entryDataByName[entryName];
+        if (entryData.length == 0) {
+            continue;
+        }
+        [orderedEntries addObject:@{
+            @"name": entryName,
+            @"data": entryData
+        }];
+    }
+
+    NSData *magicData = [SonoraBackupArchiveMagicString dataUsingEncoding:NSASCIIStringEncoding];
+    if (magicData.length != 8) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:201 description:@"Backup archive magic is invalid."];
+        }
+        return nil;
+    }
+
+    NSMutableData *archiveData = [NSMutableData data];
+    [archiveData appendData:magicData];
+    [self appendUInt32:(uint32_t)SonoraBackupArchiveVersion toData:archiveData];
+    [self appendUInt32:(uint32_t)orderedEntries.count toData:archiveData];
+
+    for (NSDictionary<NSString *, id> *entry in orderedEntries) {
+        NSString *entryName = [entry[@"name"] isKindOfClass:NSString.class] ? entry[@"name"] : @"";
+        NSData *entryPayload = [entry[@"data"] isKindOfClass:NSData.class] ? entry[@"data"] : nil;
+        if (entryName.length == 0 || entryPayload.length == 0) {
+            continue;
+        }
+        NSData *entryNameData = [entryName dataUsingEncoding:NSUTF8StringEncoding];
+        [self appendUInt32:(uint32_t)entryNameData.length toData:archiveData];
+        [archiveData appendData:entryNameData];
+        [self appendUInt64:(uint64_t)entryPayload.length toData:archiveData];
+        [archiveData appendData:entryPayload];
+    }
+
+    return [archiveData copy];
+}
+
+- (BOOL)importBackupArchiveFromURL:(NSURL *)url error:(NSError **)error {
+    NSError *readError = nil;
+    NSData *archiveData = [NSData dataWithContentsOfURL:url options:NSDataReadingMappedIfSafe error:&readError];
+    if (archiveData.length == 0 || readError != nil) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:300 description:(readError.localizedDescription ?: @"Could not read backup archive.")];
+        }
+        return NO;
+    }
+
+    NSDictionary<NSString *, NSData *> *entries = [self parseArchiveEntriesFromData:archiveData error:error];
+    if (entries == nil) {
+        return NO;
+    }
+
+    NSData *manifestData = entries[SonoraBackupManifestEntryName];
+    if (manifestData.length == 0) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:301 description:@"Backup archive has no manifest."];
+        }
+        return NO;
+    }
+
+    NSError *jsonError = nil;
+    id manifestObject = [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:&jsonError];
+    if (![manifestObject isKindOfClass:NSDictionary.class] || jsonError != nil) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:302 description:(jsonError.localizedDescription ?: @"Backup manifest is invalid.")];
+        }
+        return NO;
+    }
+    NSDictionary<NSString *, id> *manifest = (NSDictionary<NSString *, id> *)manifestObject;
+    NSArray<NSDictionary<NSString *, id> *> *manifestTracks =
+    [manifest[@"tracks"] isKindOfClass:NSArray.class] ? manifest[@"tracks"] : @[];
+    NSArray<NSDictionary<NSString *, id> *> *manifestPlaylists =
+    [manifest[@"playlists"] isKindOfClass:NSArray.class] ? manifest[@"playlists"] : @[];
+    NSArray *manifestFavoritesRaw = [manifest[@"favorites"] isKindOfClass:NSArray.class] ? manifest[@"favorites"] : @[];
+
+    SonoraLibraryManager *library = SonoraLibraryManager.sharedManager;
+    SonoraPlaylistStore *playlistStore = SonoraPlaylistStore.sharedStore;
+    SonoraFavoritesStore *favoritesStore = SonoraFavoritesStore.sharedStore;
+
+    NSArray<SonoraTrack *> *currentTracks = [library reloadTracks];
+    for (SonoraTrack *track in [currentTracks copy]) {
+        [library deleteTrackWithIdentifier:track.identifier error:nil];
+    }
+    for (SonoraPlaylist *playlist in [playlistStore.playlists copy]) {
+        [playlistStore deletePlaylistWithID:playlist.playlistID];
+    }
+    for (NSString *favoriteID in [favoritesStore.favoriteTrackIDs copy]) {
+        [favoritesStore setTrackID:favoriteID favorite:NO];
+    }
+
+    NSURL *musicDirectoryURL = [library musicDirectoryURL];
+    [NSFileManager.defaultManager createDirectoryAtURL:musicDirectoryURL
+                           withIntermediateDirectories:YES
+                                            attributes:nil
+                                                 error:nil];
+
+    NSMutableDictionary<NSString *, NSString *> *backupFileNameByTrackID = [NSMutableDictionary dictionary];
+    NSMutableOrderedSet<NSString *> *favoriteBackupIDs = [NSMutableOrderedSet orderedSet];
+
+    for (NSDictionary<NSString *, id> *trackDictionary in manifestTracks) {
+        if (![trackDictionary isKindOfClass:NSDictionary.class]) {
+            continue;
+        }
+        NSString *backupID = [trackDictionary[@"id"] isKindOfClass:NSString.class] ? trackDictionary[@"id"] : @"";
+        NSString *songEntry = [trackDictionary[@"songEntry"] isKindOfClass:NSString.class] ? trackDictionary[@"songEntry"] : @"";
+        if (backupID.length == 0 || songEntry.length == 0) {
+            continue;
+        }
+        NSData *songData = entries[songEntry];
+        if (songData.length == 0) {
+            continue;
+        }
+        NSString *preferredFileName = songEntry.lastPathComponent;
+        if (preferredFileName.length == 0) {
+            preferredFileName = [NSString stringWithFormat:@"%@.bin", [self safeTokenFromString:backupID fallback:@"track"]];
+        }
+        NSString *uniqueFileName = [self uniqueFileNameInDirectoryURL:musicDirectoryURL preferredName:preferredFileName];
+        NSURL *targetURL = [musicDirectoryURL URLByAppendingPathComponent:uniqueFileName];
+        NSError *writeError = nil;
+        [songData writeToURL:targetURL options:NSDataWritingAtomic error:&writeError];
+        if (writeError != nil) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:303 description:(writeError.localizedDescription ?: @"Could not restore audio file from archive.")];
+            }
+            return NO;
+        }
+        backupFileNameByTrackID[backupID] = uniqueFileName;
+
+        id favoriteFlag = trackDictionary[@"isFavorite"];
+        if ([favoriteFlag respondsToSelector:@selector(boolValue)] && [favoriteFlag boolValue]) {
+            [favoriteBackupIDs addObject:backupID];
+        }
+    }
+
+    for (id value in manifestFavoritesRaw) {
+        if ([value isKindOfClass:NSString.class] && ((NSString *)value).length > 0) {
+            [favoriteBackupIDs addObject:(NSString *)value];
+        }
+    }
+
+    NSArray<SonoraTrack *> *restoredTracks = [library reloadTracks];
+    NSMutableDictionary<NSString *, NSString *> *trackIDByFileName = [NSMutableDictionary dictionary];
+    for (SonoraTrack *track in restoredTracks) {
+        if (track.fileName.length > 0 && track.identifier.length > 0) {
+            trackIDByFileName[track.fileName.lowercaseString] = track.identifier;
+        }
+    }
+
+    NSMutableDictionary<NSString *, NSString *> *localTrackIDByBackupID = [NSMutableDictionary dictionary];
+    [backupFileNameByTrackID enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull backupID, NSString * _Nonnull fileName, BOOL * _Nonnull stop) {
+        (void)stop;
+        NSString *localTrackID = trackIDByFileName[fileName.lowercaseString];
+        if (localTrackID.length > 0) {
+            localTrackIDByBackupID[backupID] = localTrackID;
+        }
+    }];
+
+    for (NSString *backupFavoriteID in favoriteBackupIDs) {
+        NSString *localTrackID = localTrackIDByBackupID[backupFavoriteID];
+        if (localTrackID.length > 0) {
+            [favoritesStore setTrackID:localTrackID favorite:YES];
+        }
+    }
+
+    for (NSDictionary<NSString *, id> *playlistDictionary in manifestPlaylists) {
+        if (![playlistDictionary isKindOfClass:NSDictionary.class]) {
+            continue;
+        }
+        NSString *playlistName = [playlistDictionary[@"name"] isKindOfClass:NSString.class] ? playlistDictionary[@"name"] : @"";
+        playlistName = [playlistName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (playlistName.length == 0) {
+            continue;
+        }
+
+        NSArray *backupTrackIDs = [playlistDictionary[@"trackIds"] isKindOfClass:NSArray.class] ? playlistDictionary[@"trackIds"] : @[];
+        NSMutableOrderedSet<NSString *> *localTrackIDs = [NSMutableOrderedSet orderedSet];
+        for (id value in backupTrackIDs) {
+            if (![value isKindOfClass:NSString.class]) {
+                continue;
+            }
+            NSString *localTrackID = localTrackIDByBackupID[(NSString *)value];
+            if (localTrackID.length > 0) {
+                [localTrackIDs addObject:localTrackID];
+            }
+        }
+        if (localTrackIDs.count == 0) {
+            continue;
+        }
+
+        UIImage *coverImage = nil;
+        NSString *coverEntry = [playlistDictionary[@"coverEntry"] isKindOfClass:NSString.class] ? playlistDictionary[@"coverEntry"] : @"";
+        if (coverEntry.length > 0) {
+            NSData *coverData = entries[coverEntry];
+            if (coverData.length > 0) {
+                coverImage = [UIImage imageWithData:coverData];
+            }
+        }
+
+        [playlistStore addPlaylistWithName:playlistName
+                                   trackIDs:localTrackIDs.array
+                                 coverImage:coverImage];
+    }
+
+    NSDictionary<NSString *, id> *settings = [manifest[@"settings"] isKindOfClass:NSDictionary.class] ? manifest[@"settings"] : nil;
+    if (settings != nil) {
+        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+
+        id fontValue = settings[@"fontStyle"];
+        NSInteger fontIndex = 0;
+        if ([fontValue isKindOfClass:NSString.class]) {
+            fontIndex = [((NSString *)fontValue).lowercaseString isEqualToString:@"serif"] ? 1 : 0;
+        } else if ([fontValue respondsToSelector:@selector(integerValue)]) {
+            fontIndex = [fontValue integerValue];
+        }
+        [defaults setInteger:MAX(0, MIN(1, fontIndex)) forKey:SonoraSettingsFontKey];
+
+        id artworkStyleValue = settings[@"artworkStyle"];
+        NSInteger artworkIndex = 1;
+        if ([artworkStyleValue isKindOfClass:NSString.class]) {
+            artworkIndex = [((NSString *)artworkStyleValue).lowercaseString isEqualToString:@"square"] ? 0 : 1;
+        } else if ([artworkStyleValue respondsToSelector:@selector(integerValue)]) {
+            artworkIndex = [artworkStyleValue integerValue];
+        }
+        [defaults setInteger:MAX(0, MIN(1, artworkIndex)) forKey:SonoraSettingsArtworkStyleKey];
+
+        id accentValue = settings[@"accentHex"];
+        if ([accentValue isKindOfClass:NSString.class] && ((NSString *)accentValue).length > 0) {
+            [defaults setObject:accentValue forKey:SonoraSettingsAccentHexKey];
+            [defaults removeObjectForKey:SonoraSettingsLegacyAccentColorKey];
+        }
+
+        id preserveValue = settings[@"preservePlayerModes"];
+        if ([preserveValue respondsToSelector:@selector(boolValue)]) {
+            [defaults setBool:[preserveValue boolValue] forKey:SonoraSettingsPreservePlayerModesKey];
+        }
+
+        id gapValue = settings[@"trackGapSeconds"];
+        if ([gapValue respondsToSelector:@selector(doubleValue)]) {
+            [defaults setDouble:[self nearestTrackGapValueForValue:[gapValue doubleValue]] forKey:SonoraSettingsTrackGapKey];
+        }
+
+        id maxStorageValue = settings[@"maxStorageMb"];
+        if (maxStorageValue == nil) {
+            maxStorageValue = settings[@"maxStorageMB"];
+        }
+        if ([maxStorageValue respondsToSelector:@selector(integerValue)]) {
+            [defaults setInteger:[self nearestMaxStorageValueForValue:[maxStorageValue integerValue]] forKey:SonoraSettingsMaxStorageMBKey];
+        }
+
+        id artworkEqualizerValue = settings[@"artworkEqualizer"];
+        if ([artworkEqualizerValue respondsToSelector:@selector(boolValue)]) {
+            [defaults setBool:[artworkEqualizerValue boolValue] forKey:SonoraSettingsArtworkEqualizerKey];
+        }
+    }
+
+    [self loadSettingsValues];
+    [self refreshStorageUsage];
+    [self notifyPlayerSettingsChanged];
+    [NSNotificationCenter.defaultCenter postNotificationName:SonoraPlaylistsDidChangeNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:SonoraFavoritesDidChangeNotification object:nil];
+    return YES;
+}
+
 - (void)notifyPlayerSettingsChanged {
     [NSNotificationCenter.defaultCenter postNotificationName:SonoraPlayerSettingsDidChangeNotification object:nil];
 }
@@ -2501,21 +3278,20 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
     [self applyTransparentNavigationBarAppearance];
 
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.text = @"Home";
-    titleLabel.textColor = UIColor.labelColor;
-    titleLabel.font = SonoraYSMusicFont(30.0);
-    [titleLabel sizeToFit];
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraHomeNavigationTitleView(@"Home")];
 
     UIBarButtonItem *clockItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"clock"]
                                                                    style:UIBarButtonItemStylePlain
                                                                   target:self
                                                                   action:@selector(openHistoryTapped)];
+    clockItem.title = @"History";
+    clockItem.accessibilityLabel = @"History";
     UIBarButtonItem *settingsItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"gearshape"]
                                                                       style:UIBarButtonItemStylePlain
                                                                      target:self
                                                                      action:@selector(openSettingsTapped)];
+    settingsItem.title = @"Settings";
+    settingsItem.accessibilityLabel = @"Settings";
     self.navigationItem.rightBarButtonItems = @[settingsItem, clockItem];
 }
 

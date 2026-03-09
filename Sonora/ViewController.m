@@ -14,6 +14,10 @@
 #import "SonoraMusicModule.h"
 #import "SonoraServices.h"
 
+#if __has_include(<UIKit/UIGlassEffect.h>)
+#import <UIKit/UIGlassEffect.h>
+#endif
+
 static UIColor *SonoraRootDefaultAccentColor(void) {
     return [UIColor colorWithRed:1.0 green:0.83 blue:0.08 alpha:1.0];
 }
@@ -64,12 +68,7 @@ static UIColor *SonoraAccentYellowColor(void) {
 }
 
 static UIColor *SonoraTabActiveIconColor(void) {
-    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-        if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return UIColor.whiteColor;
-        }
-        return [UIColor colorWithWhite:0.08 alpha:1.0];
-    }];
+    return SonoraAccentYellowColor();
 }
 
 static UIColor *SonoraTabInactiveIconColor(void) {
@@ -91,6 +90,9 @@ static UIColor *SonoraTabBarBackgroundColor(void) {
 }
 
 static UIColor *SonoraMiniPlayerBackgroundColor(void) {
+    if (@available(iOS 26.0, *)) {
+        return UIColor.clearColor;
+    }
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
         if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
             return [UIColor colorWithWhite:0.0 alpha:0.30];
@@ -100,6 +102,9 @@ static UIColor *SonoraMiniPlayerBackgroundColor(void) {
 }
 
 static UIColor *SonoraMiniPlayerBorderColor(void) {
+    if (@available(iOS 26.0, *)) {
+        return UIColor.clearColor;
+    }
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
         if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
             return [UIColor colorWithWhite:1.0 alpha:0.14];
@@ -165,7 +170,7 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     musicNav.navigationBar.prefersLargeTitles = NO;
     UIImage *musicIcon = [self tabSymbolIconNamed:@"magnifyingglass" pointSize:18.0];
     musicNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:nil image:musicIcon selectedImage:musicIcon];
-    musicNav.tabBarItem.imageInsets = UIEdgeInsetsMake(2.0, 0.0, -2.0, 0.0);
+    [self configureIconOnlyTabBarItem:musicNav.tabBarItem];
 
     SonoraHomeViewController *homeVC = [[SonoraHomeViewController alloc] init];
     UINavigationController *homeNav = [[UINavigationController alloc] initWithRootViewController:homeVC];
@@ -173,7 +178,7 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     homeNav.navigationBar.prefersLargeTitles = NO;
     UIImage *homeIcon = [self tabSymbolIconNamed:@"house.fill" pointSize:19.5];
     homeNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:nil image:homeIcon selectedImage:homeIcon];
-    homeNav.tabBarItem.imageInsets = UIEdgeInsetsMake(2.0, 0.0, -2.0, 0.0);
+    [self configureIconOnlyTabBarItem:homeNav.tabBarItem];
 
     SonoraCollectionsViewController *collectionsVC = [[SonoraCollectionsViewController alloc] init];
     UINavigationController *collectionsNav = [[UINavigationController alloc] initWithRootViewController:collectionsVC];
@@ -181,7 +186,7 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     collectionsNav.navigationBar.prefersLargeTitles = NO;
     UIImage *collectionsIcon = [self tabIconNamed:@"tab_lib"];
     collectionsNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:nil image:collectionsIcon selectedImage:collectionsIcon];
-    collectionsNav.tabBarItem.imageInsets = UIEdgeInsetsMake(2.0, 0.0, -2.0, 0.0);
+    [self configureIconOnlyTabBarItem:collectionsNav.tabBarItem];
 
     self.viewControllers = @[musicNav, homeNav, collectionsNav];
     self.selectedIndex = 1;
@@ -189,26 +194,35 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
 
 - (void)setupAppearance {
     UITabBarAppearance *tabAppearance = [[UITabBarAppearance alloc] init];
-    [tabAppearance configureWithOpaqueBackground];
-    tabAppearance.backgroundEffect = nil;
-    tabAppearance.backgroundColor = SonoraTabBarBackgroundColor();
-    tabAppearance.shadowColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-        if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:1.0 alpha:0.07];
-        }
-        return [UIColor colorWithWhite:0.0 alpha:0.08];
-    }];
+    if (@available(iOS 26.0, *)) {
+        [tabAppearance configureWithDefaultBackground];
+    } else {
+        [tabAppearance configureWithOpaqueBackground];
+        tabAppearance.backgroundEffect = nil;
+        tabAppearance.backgroundColor = SonoraTabBarBackgroundColor();
+        tabAppearance.shadowColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+            if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithWhite:1.0 alpha:0.07];
+            }
+            return [UIColor colorWithWhite:0.0 alpha:0.08];
+        }];
+    }
 
     UIColor *inactiveColor = SonoraTabInactiveIconColor();
     UIColor *activeColor = SonoraTabActiveIconColor();
 
-    UITabBarItemAppearance *stacked = tabAppearance.stackedLayoutAppearance;
-    stacked.normal.iconColor = inactiveColor;
-    stacked.selected.iconColor = activeColor;
-    stacked.normal.titleTextAttributes = @{NSForegroundColorAttributeName: UIColor.clearColor};
-    stacked.selected.titleTextAttributes = @{NSForegroundColorAttributeName: UIColor.clearColor};
-    stacked.normal.titlePositionAdjustment = UIOffsetMake(0.0, 14.0);
-    stacked.selected.titlePositionAdjustment = UIOffsetMake(0.0, 14.0);
+    void (^configureItemAppearance)(UITabBarItemAppearance *) = ^(UITabBarItemAppearance *appearance) {
+        appearance.normal.iconColor = inactiveColor;
+        appearance.selected.iconColor = activeColor;
+        appearance.normal.titleTextAttributes = @{NSForegroundColorAttributeName: UIColor.clearColor};
+        appearance.selected.titleTextAttributes = @{NSForegroundColorAttributeName: UIColor.clearColor};
+        appearance.normal.titlePositionAdjustment = UIOffsetMake(0.0, 10.0);
+        appearance.selected.titlePositionAdjustment = UIOffsetMake(0.0, 10.0);
+    };
+
+    configureItemAppearance(tabAppearance.stackedLayoutAppearance);
+    configureItemAppearance(tabAppearance.inlineLayoutAppearance);
+    configureItemAppearance(tabAppearance.compactInlineLayoutAppearance);
 
     self.tabBar.standardAppearance = tabAppearance;
     if (@available(iOS 15.0, *)) {
@@ -217,10 +231,17 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     self.tabBar.itemPositioning = UITabBarItemPositioningCentered;
     self.tabBar.tintColor = activeColor;
     self.tabBar.unselectedItemTintColor = inactiveColor;
+    if (@available(iOS 26.0, *)) {
+        self.tabBarMinimizeBehavior = UITabBarMinimizeBehaviorOnScrollDown;
+    }
 
     UINavigationBarAppearance *navAppearance = [[UINavigationBarAppearance alloc] init];
     [navAppearance configureWithDefaultBackground];
-    navAppearance.backgroundColor = UIColor.systemBackgroundColor;
+    if (@available(iOS 26.0, *)) {
+        navAppearance.backgroundColor = nil;
+    } else {
+        navAppearance.backgroundColor = UIColor.systemBackgroundColor;
+    }
     navAppearance.titleTextAttributes = @{
         NSForegroundColorAttributeName: UIColor.labelColor,
         NSFontAttributeName: [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold]
@@ -238,7 +259,14 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
         NSForegroundColorAttributeName: UIColor.secondaryLabelColor
     };
     navAppearance.buttonAppearance = barButtonAppearance;
-    navAppearance.doneButtonAppearance = barButtonAppearance;
+    if (@available(iOS 26.0, *)) {
+        navAppearance.prominentButtonAppearance = barButtonAppearance;
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        navAppearance.doneButtonAppearance = barButtonAppearance;
+#pragma clang diagnostic pop
+    }
     UIBarButtonItemAppearance *backButtonAppearance = [[UIBarButtonItemAppearance alloc] init];
     backButtonAppearance.normal.titleTextAttributes = @{
         NSForegroundColorAttributeName: UIColor.clearColor
@@ -268,25 +296,26 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
 }
 
 - (void)handlePlayerSettingsChanged {
-    self.view.tintColor = SonoraAccentYellowColor();
+    UIColor *accentColor = SonoraAccentYellowColor();
+    self.view.tintColor = accentColor;
+    [self applyActiveTabAccentColor:accentColor];
 }
 
 - (void)setupMiniPlayer {
     UIView *container = [[UIView alloc] init];
     container.translatesAutoresizingMaskIntoConstraints = NO;
     container.backgroundColor = SonoraMiniPlayerBackgroundColor();
-    container.layer.borderWidth = 1.0;
+    container.layer.borderWidth = [self miniPlayerBorderWidth];
     container.layer.borderColor = SonoraMiniPlayerBorderColor().CGColor;
     container.layer.cornerRadius = 16.0;
     container.layer.masksToBounds = YES;
     container.hidden = YES;
     self.miniPlayerContainer = container;
 
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[self miniPlayerVisualEffect]];
     blurView.translatesAutoresizingMaskIntoConstraints = NO;
     blurView.userInteractionEnabled = NO;
-    blurView.alpha = 0.90;
+    blurView.alpha = [self miniPlayerVisualEffectOpacity];
     self.miniPlayerBlurView = blurView;
 
     UIImageView *artworkView = [[UIImageView alloc] init];
@@ -427,10 +456,21 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     return nil;
 }
 
+- (UIViewController *)resolvedTopPresentedViewControllerFrom:(UIViewController *)viewController {
+    UIViewController *active = viewController;
+    while (active.presentedViewController != nil && !active.presentedViewController.isBeingDismissed) {
+        active = active.presentedViewController;
+    }
+    return active;
+}
+
 - (BOOL)isMiniPlayerAllowedForCurrentController {
     UINavigationController *navigation = [self selectedNavigationController];
     if (navigation == nil) {
         return YES;
+    }
+    if (navigation.viewControllers.count > 1) {
+        return NO;
     }
 
     id<UIViewControllerTransitionCoordinator> coordinator = navigation.transitionCoordinator;
@@ -442,12 +482,19 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     }
 
     UIViewController *active = navigation.visibleViewController ?: navigation.topViewController;
+    active = [self resolvedTopPresentedViewControllerFrom:active];
     return [self isMiniPlayerAllowedForViewController:active];
 }
 
 - (BOOL)isMiniPlayerAllowedForViewController:(UIViewController *)viewController {
     if (viewController == nil) {
         return YES;
+    }
+    if (viewController.presentingViewController != nil) {
+        return NO;
+    }
+    if ([viewController isKindOfClass:UIAlertController.class]) {
+        return NO;
     }
     if (viewController.hidesBottomBarWhenPushed) {
         return NO;
@@ -522,7 +569,13 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     }
 
     CGFloat distanceFromBottom = MAX(self.view.safeAreaInsets.bottom, 0.0);
-    if (self.tabBar.superview != nil) {
+    if (@available(iOS 26.0, *)) {
+        CGRect contentFrame = self.contentLayoutGuide.layoutFrame;
+        if (!CGRectIsEmpty(contentFrame)) {
+            CGFloat obscuredByBars = MAX(0.0, CGRectGetHeight(self.view.bounds) - CGRectGetMaxY(contentFrame));
+            distanceFromBottom = MAX(distanceFromBottom, obscuredByBars);
+        }
+    } else if (self.tabBar.superview != nil) {
         CGRect tabBarFrameInView = [self.view convertRect:self.tabBar.frame fromView:self.tabBar.superview];
         CGFloat tabBarTop = CGRectGetMinY(tabBarFrameInView);
         if (isfinite(tabBarTop) && tabBarTop < (CGRectGetHeight(self.view.bounds) - 0.5)) {
@@ -531,7 +584,11 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
         }
     }
 
-    self.miniPlayerBottomConstraint.constant = -(distanceFromBottom + 6.0);
+    CGFloat bottomSpacing = 6.0;
+    if (@available(iOS 26.0, *)) {
+        bottomSpacing = 8.0;
+    }
+    self.miniPlayerBottomConstraint.constant = -(distanceFromBottom + bottomSpacing);
 }
 
 - (void)updateMiniPlayer {
@@ -542,8 +599,10 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     BOOL shouldShow = [self shouldShowMiniPlayer];
 
     self.miniPlayerContainer.backgroundColor = SonoraMiniPlayerBackgroundColor();
+    self.miniPlayerContainer.layer.borderWidth = [self miniPlayerBorderWidth];
     self.miniPlayerContainer.layer.borderColor = SonoraMiniPlayerBorderColor().CGColor;
-    self.miniPlayerBlurView.effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+    self.miniPlayerBlurView.effect = [self miniPlayerVisualEffect];
+    self.miniPlayerBlurView.alpha = [self miniPlayerVisualEffectOpacity];
     if (!self.miniPlayerTransitionAnimating) {
         self.miniPlayerContainer.hidden = !shouldShow;
     }
@@ -602,6 +661,58 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
         insets.bottom = bottomInset;
         target.additionalSafeAreaInsets = insets;
     }
+}
+
+- (void)configureIconOnlyTabBarItem:(UITabBarItem *)item {
+    if (![item isKindOfClass:UITabBarItem.class]) {
+        return;
+    }
+
+    item.title = @"";
+    item.imageInsets = UIEdgeInsetsMake(2.0, 0.0, -2.0, 0.0);
+    item.titlePositionAdjustment = UIOffsetMake(0.0, 1000.0);
+
+    NSDictionary<NSAttributedStringKey, id> *hiddenTitleAttributes = @{
+        NSForegroundColorAttributeName: UIColor.clearColor
+    };
+    [item setTitleTextAttributes:hiddenTitleAttributes forState:UIControlStateNormal];
+    [item setTitleTextAttributes:hiddenTitleAttributes forState:UIControlStateSelected];
+    [item setTitleTextAttributes:hiddenTitleAttributes forState:UIControlStateDisabled];
+    [item setTitleTextAttributes:hiddenTitleAttributes forState:UIControlStateFocused];
+}
+
+- (void)applyActiveTabAccentColor:(UIColor *)accentColor {
+    if (accentColor == nil) {
+        return;
+    }
+
+    self.tabBar.tintColor = accentColor;
+
+    UITabBarAppearance *standardAppearance = self.tabBar.standardAppearance;
+    [self applyActiveTabAccentColor:accentColor toTabBarAppearance:standardAppearance];
+    self.tabBar.standardAppearance = standardAppearance;
+
+    if (@available(iOS 15.0, *)) {
+        UITabBarAppearance *scrollAppearance = self.tabBar.scrollEdgeAppearance ?: [standardAppearance copy];
+        [self applyActiveTabAccentColor:accentColor toTabBarAppearance:scrollAppearance];
+        self.tabBar.scrollEdgeAppearance = scrollAppearance;
+    }
+}
+
+- (void)applyActiveTabAccentColor:(UIColor *)accentColor toTabBarAppearance:(UITabBarAppearance *)appearance {
+    if (appearance == nil) {
+        return;
+    }
+    [self applyActiveTabAccentColor:accentColor toTabBarItemAppearance:appearance.stackedLayoutAppearance];
+    [self applyActiveTabAccentColor:accentColor toTabBarItemAppearance:appearance.inlineLayoutAppearance];
+    [self applyActiveTabAccentColor:accentColor toTabBarItemAppearance:appearance.compactInlineLayoutAppearance];
+}
+
+- (void)applyActiveTabAccentColor:(UIColor *)accentColor toTabBarItemAppearance:(UITabBarItemAppearance *)appearance {
+    if (appearance == nil) {
+        return;
+    }
+    appearance.selected.iconColor = accentColor;
 }
 
 - (void)miniPlayerOpenTapped {
@@ -744,6 +855,37 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     }
     UIImage *normalized = [self normalizedIconImage:image targetSize:24.0];
     return [normalized imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
+- (CGFloat)miniPlayerBorderWidth {
+    if (@available(iOS 26.0, *)) {
+        return 0.0;
+    }
+    return 1.0;
+}
+
+- (CGFloat)miniPlayerVisualEffectOpacity {
+    if (@available(iOS 26.0, *)) {
+        return 1.0;
+    }
+    return 0.90;
+}
+
+- (UIVisualEffect *)miniPlayerVisualEffect {
+#if __has_include(<UIKit/UIGlassEffect.h>)
+    if (@available(iOS 26.0, *)) {
+        UIGlassEffect *effect = [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
+        effect.interactive = YES;
+        effect.tintColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+            if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithWhite:1.0 alpha:0.11];
+            }
+            return [UIColor colorWithWhite:1.0 alpha:0.06];
+        }];
+        return effect;
+    }
+#endif
+    return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
 }
 
 @end

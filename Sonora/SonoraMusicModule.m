@@ -47,6 +47,16 @@ static NSString *SonoraSleepTimerRemainingString(NSTimeInterval interval);
 static void SonoraPresentSleepTimerActionSheet(UIViewController *controller,
                                                UIView *sourceView,
                                                dispatch_block_t updateHandler);
+static void SonoraConfigureNavigationIconBarButtonItem(UIBarButtonItem *item, NSString *title) {
+    if (![item isKindOfClass:UIBarButtonItem.class]) {
+        return;
+    }
+    if (title.length == 0) {
+        return;
+    }
+    item.title = title;
+    item.accessibilityLabel = title;
+}
 
 typedef NS_ENUM(NSInteger, SonoraPlayerFontStyle) {
     SonoraPlayerFontStyleSystem = 0,
@@ -255,7 +265,7 @@ static UIImage *SonoraLovelySongsCoverImage(CGSize size) {
     }];
 }
 
-static UILabel *SonoraWhiteSectionTitleLabel(NSString *text) {
+static UIView *SonoraWhiteSectionTitleLabel(NSString *text) {
     UILabel *label = [[UILabel alloc] init];
     label.text = text;
     label.textColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
@@ -266,6 +276,16 @@ static UILabel *SonoraWhiteSectionTitleLabel(NSString *text) {
     }];
     label.font = SonoraHeadlineFont(28.0);
     [label sizeToFit];
+
+    if (@available(iOS 26.0, *)) {
+        CGFloat horizontalPadding = 10.0;
+        CGFloat width = ceil(CGRectGetWidth(label.bounds)) + (horizontalPadding * 2.0);
+        CGFloat height = ceil(CGRectGetHeight(label.bounds));
+        UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, width, height)];
+        label.frame = CGRectMake(horizontalPadding, 0.0, ceil(CGRectGetWidth(label.bounds)), height);
+        [container addSubview:label];
+        return container;
+    }
     return label;
 }
 
@@ -576,6 +596,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
 @property (nonatomic, copy) NSString *brokerRapidAPIHost;
 @property (nonatomic, copy) NSString *brokerRapidAPIKey;
 @property (nonatomic, assign) NSTimeInterval brokerCredentialFetchedAt;
+@property (nonatomic, assign) BOOL artistsSectionEnabled;
 @property (nonatomic, copy) NSString *spotifyAccessToken;
 @property (nonatomic, strong, nullable) NSDate *spotifyTokenExpiresAt;
 @property (nonatomic, strong) NSURLSession *session;
@@ -617,6 +638,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
         _brokerRapidAPIHost = @"";
         _brokerRapidAPIKey = @"";
         _brokerCredentialFetchedAt = 0.0;
+        _artistsSectionEnabled = YES;
         _spotifyAccessToken = @"";
         _spotifyTokenExpiresAt = nil;
         _session = [NSURLSession sessionWithConfiguration:NSURLSessionConfiguration.defaultSessionConfiguration];
@@ -754,61 +776,9 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
 - (void)fetchBrokerCredentialWithCompletion:(void (^)(NSString * _Nullable host, NSString * _Nullable key))completion {
     NSString *cachedHost = SonoraTrimmedStringValue(self.brokerRapidAPIHost);
     NSString *cachedKey = SonoraTrimmedStringValue(self.brokerRapidAPIKey);
-    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
-    if (cachedHost.length > 0 &&
-        cachedKey.length > 0 &&
-        self.brokerCredentialFetchedAt > 0.0 &&
-        (now - self.brokerCredentialFetchedAt) < 120.0) {
-        [self dispatchOnMainQueue:^{
-            completion(cachedHost, cachedKey);
-        }];
-        return;
-    }
-
-    NSURL *url = [NSURL URLWithString:SonoraMiniStreamingKeyBrokerAvailableURLString];
-    if (url == nil) {
-        [self dispatchOnMainQueue:^{
-            completion(cachedHost, cachedKey);
-        }];
-        return;
-    }
-
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"GET";
-    request.timeoutInterval = 8.0;
-
-    __weak typeof(self) weakSelf = self;
-    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request
-                                                  completionHandler:^(NSData * _Nullable data,
-                                                                      NSURLResponse * _Nullable response,
-                                                                      NSError * _Nullable error) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf == nil) {
-            return;
-        }
-
-        NSString *resolvedHost = cachedHost;
-        NSString *resolvedKey = cachedKey;
-        if (error == nil && data.length > 0) {
-            id object = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-            NSDictionary *json = [object isKindOfClass:NSDictionary.class] ? (NSDictionary *)object : nil;
-            NSDictionary *nextNode = [json[@"next"] isKindOfClass:NSDictionary.class] ? json[@"next"] : nil;
-            NSString *candidateKey = SonoraTrimmedStringValue(nextNode[@"key"]);
-            NSString *candidateHost = SonoraTrimmedStringValue(nextNode[@"host"]);
-            if (candidateKey.length > 0 && candidateHost.length > 0) {
-                resolvedHost = candidateHost;
-                resolvedKey = candidateKey;
-                strongSelf.brokerRapidAPIHost = candidateHost;
-                strongSelf.brokerRapidAPIKey = candidateKey;
-                strongSelf.brokerCredentialFetchedAt = NSDate.date.timeIntervalSince1970;
-            }
-        }
-
-        [strongSelf dispatchOnMainQueue:^{
-            completion(resolvedHost, resolvedKey);
-        }];
+    [self dispatchOnMainQueue:^{
+        completion(cachedHost, cachedKey);
     }];
-    [task resume];
 }
 
 - (void)fetchSpotifyAccessTokenWithCompletion:(void (^)(NSString * _Nullable token, NSError * _Nullable error))completion {
@@ -1130,6 +1100,65 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                 return;
             }
 
+            NSDictionary *payloadNode = [strongSelf miniStreamingPayloadNodeFromJSON:json ?: @{}];
+            id artistsFlagValue = payloadNode[@"artistsEnabled"];
+            if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+                artistsFlagValue = payloadNode[@"showArtists"];
+            }
+            if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+                id artistsNode = payloadNode[@"artists"];
+                if (![artistsNode isKindOfClass:NSDictionary.class] && ![artistsNode isKindOfClass:NSArray.class]) {
+                    artistsFlagValue = artistsNode;
+                }
+            }
+            if ((artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) &&
+                [json isKindOfClass:NSDictionary.class]) {
+                artistsFlagValue = json[@"artistsEnabled"];
+                if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+                    artistsFlagValue = json[@"showArtists"];
+                }
+                if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+                    id artistsNode = json[@"artists"];
+                    if (![artistsNode isKindOfClass:NSDictionary.class] && ![artistsNode isKindOfClass:NSArray.class]) {
+                        artistsFlagValue = artistsNode;
+                    }
+                }
+            }
+
+            BOOL hasArtistsFlag = NO;
+            BOOL artistsEnabled = strongSelf.artistsSectionEnabled;
+            if ([artistsFlagValue respondsToSelector:@selector(boolValue)] &&
+                ![artistsFlagValue isKindOfClass:NSString.class]) {
+                hasArtistsFlag = YES;
+                artistsEnabled = [artistsFlagValue boolValue];
+            } else if ([artistsFlagValue isKindOfClass:NSString.class]) {
+                NSString *normalizedArtistsFlag = SonoraTrimmedStringValue(artistsFlagValue).lowercaseString;
+                if (normalizedArtistsFlag.length > 0) {
+                    if ([normalizedArtistsFlag isEqualToString:@"no"] ||
+                        [normalizedArtistsFlag isEqualToString:@"false"] ||
+                        [normalizedArtistsFlag isEqualToString:@"off"] ||
+                        [normalizedArtistsFlag isEqualToString:@"0"] ||
+                        [normalizedArtistsFlag isEqualToString:@"disabled"] ||
+                        [normalizedArtistsFlag isEqualToString:@"hide"] ||
+                        [normalizedArtistsFlag isEqualToString:@"hidden"]) {
+                        hasArtistsFlag = YES;
+                        artistsEnabled = NO;
+                    } else if ([normalizedArtistsFlag isEqualToString:@"yes"] ||
+                               [normalizedArtistsFlag isEqualToString:@"true"] ||
+                               [normalizedArtistsFlag isEqualToString:@"on"] ||
+                               [normalizedArtistsFlag isEqualToString:@"1"] ||
+                               [normalizedArtistsFlag isEqualToString:@"enabled"] ||
+                               [normalizedArtistsFlag isEqualToString:@"show"] ||
+                               [normalizedArtistsFlag isEqualToString:@"visible"]) {
+                        hasArtistsFlag = YES;
+                        artistsEnabled = YES;
+                    }
+                }
+            }
+            if (hasArtistsFlag) {
+                strongSelf.artistsSectionEnabled = artistsEnabled;
+            }
+
             NSDictionary *tracksNode = [json[@"tracks"] isKindOfClass:NSDictionary.class] ? json[@"tracks"] : nil;
             NSArray *items = [tracksNode[@"items"] isKindOfClass:NSArray.class] ? tracksNode[@"items"] : @[];
             NSMutableArray<SonoraMiniStreamingTrack *> *results = [NSMutableArray arrayWithCapacity:items.count];
@@ -1235,6 +1264,64 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
         }
 
         NSDictionary *payloadNode = [strongBackendSelf miniStreamingPayloadNodeFromJSON:json ?: @{}];
+        id artistsFlagValue = payloadNode[@"artistsEnabled"];
+        if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+            artistsFlagValue = payloadNode[@"showArtists"];
+        }
+        if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+            id artistsNodeRaw = payloadNode[@"artists"];
+            if (![artistsNodeRaw isKindOfClass:NSDictionary.class] && ![artistsNodeRaw isKindOfClass:NSArray.class]) {
+                artistsFlagValue = artistsNodeRaw;
+            }
+        }
+        if ((artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) &&
+            [json isKindOfClass:NSDictionary.class]) {
+            artistsFlagValue = json[@"artistsEnabled"];
+            if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+                artistsFlagValue = json[@"showArtists"];
+            }
+            if (artistsFlagValue == nil || [artistsFlagValue isKindOfClass:NSNull.class]) {
+                id artistsNodeRaw = json[@"artists"];
+                if (![artistsNodeRaw isKindOfClass:NSDictionary.class] && ![artistsNodeRaw isKindOfClass:NSArray.class]) {
+                    artistsFlagValue = artistsNodeRaw;
+                }
+            }
+        }
+
+        BOOL hasArtistsFlag = NO;
+        BOOL artistsEnabled = strongBackendSelf.artistsSectionEnabled;
+        if ([artistsFlagValue respondsToSelector:@selector(boolValue)] &&
+            ![artistsFlagValue isKindOfClass:NSString.class]) {
+            hasArtistsFlag = YES;
+            artistsEnabled = [artistsFlagValue boolValue];
+        } else if ([artistsFlagValue isKindOfClass:NSString.class]) {
+            NSString *normalizedArtistsFlag = SonoraTrimmedStringValue(artistsFlagValue).lowercaseString;
+            if (normalizedArtistsFlag.length > 0) {
+                if ([normalizedArtistsFlag isEqualToString:@"no"] ||
+                    [normalizedArtistsFlag isEqualToString:@"false"] ||
+                    [normalizedArtistsFlag isEqualToString:@"off"] ||
+                    [normalizedArtistsFlag isEqualToString:@"0"] ||
+                    [normalizedArtistsFlag isEqualToString:@"disabled"] ||
+                    [normalizedArtistsFlag isEqualToString:@"hide"] ||
+                    [normalizedArtistsFlag isEqualToString:@"hidden"]) {
+                    hasArtistsFlag = YES;
+                    artistsEnabled = NO;
+                } else if ([normalizedArtistsFlag isEqualToString:@"yes"] ||
+                           [normalizedArtistsFlag isEqualToString:@"true"] ||
+                           [normalizedArtistsFlag isEqualToString:@"on"] ||
+                           [normalizedArtistsFlag isEqualToString:@"1"] ||
+                           [normalizedArtistsFlag isEqualToString:@"enabled"] ||
+                           [normalizedArtistsFlag isEqualToString:@"show"] ||
+                           [normalizedArtistsFlag isEqualToString:@"visible"]) {
+                    hasArtistsFlag = YES;
+                    artistsEnabled = YES;
+                }
+            }
+        }
+        if (hasArtistsFlag) {
+            strongBackendSelf.artistsSectionEnabled = artistsEnabled;
+        }
+
         NSDictionary *artistsNode = [payloadNode[@"artists"] isKindOfClass:NSDictionary.class] ? payloadNode[@"artists"] : nil;
         NSArray *items = [artistsNode[@"items"] isKindOfClass:NSArray.class] ? artistsNode[@"items"] : @[];
         NSMutableArray<SonoraMiniStreamingArtist *> *results = [NSMutableArray arrayWithCapacity:items.count];
@@ -1435,7 +1522,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
         self.currentArtistTopTracksTask = nil;
     }
 
-    NSUInteger boundedLimit = (limit == 0 || limit == NSUIntegerMax) ? 200 : MIN(MAX(limit, (NSUInteger)1), (NSUInteger)200);
+    NSUInteger boundedLimit = (limit == 0 || limit == NSUIntegerMax) ? 100 : MIN(MAX(limit, (NSUInteger)1), (NSUInteger)100);
     NSString *encodedArtistID = [normalizedArtistID stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet];
     NSString *topTracksPath = [NSString stringWithFormat:@"/api/spotify/artists/%@/top-tracks", encodedArtistID ?: @""];
     NSURL *backendTopTracksURL = [self miniStreamingBackendURLForPath:topTracksPath
@@ -2174,7 +2261,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                                                                                                            brokerKey:brokerKey ?: @""];
         if (candidates.count == 0) {
             [strongSelf dispatchOnMainQueue:^{
-                completion(nil, SonoraMiniStreamingError(1203, @"Ключ с сервера недоступен, попробуйте позже."));
+                completion(nil, SonoraMiniStreamingError(1203, SonoraMiniStreamingInstallUnavailableMessage));
             }];
             return;
         }
@@ -3450,6 +3537,7 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *artistResults;
 @property (nonatomic, copy) NSArray<SonoraMiniStreamingTrack *> *miniStreamingTracks;
 @property (nonatomic, copy) NSArray<SonoraMiniStreamingArtist *> *miniStreamingArtists;
+@property (nonatomic, assign) BOOL miniStreamingArtistsSectionVisible;
 @property (nonatomic, copy) NSArray<NSNumber *> *visibleSections;
 @property (nonatomic, copy) NSString *searchQuery;
 @property (nonatomic, strong) UISearchController *searchController;
@@ -3481,7 +3569,9 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     [super viewDidLoad];
 
     NSString *pageTitle = self.musicOnlyMode ? @"Music" : @"Search";
-    self.title = pageTitle;
+    self.title = nil;
+    self.tabBarItem.title = @"";
+    self.tabBarItem.titlePositionAdjustment = UIOffsetMake(0.0, 1000.0);
     self.navigationItem.title = nil;
     self.navigationItem.titleView = nil;
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraWhiteSectionTitleLabel(pageTitle)];
@@ -3506,6 +3596,7 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     self.miniStreamingClient = [[SonoraMiniStreamingClient alloc] init];
     self.miniStreamingTracks = @[];
     self.miniStreamingArtists = @[];
+    self.miniStreamingArtistsSectionVisible = self.miniStreamingClient.artistsSectionEnabled;
     self.miniStreamingArtworkCache = [[NSCache alloc] init];
     self.miniStreamingArtworkCache.countLimit = 128;
     self.miniStreamingArtworkCache.totalCostLimit = 96 * 1024 * 1024;
@@ -4090,6 +4181,7 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     NSString *normalizedQuery = SonoraNormalizedSearchText(query);
 
     if (normalizedQuery.length < 2 || ![self.miniStreamingClient isConfigured]) {
+        self.miniStreamingArtistsSectionVisible = self.miniStreamingClient.artistsSectionEnabled;
         if (self.miniStreamingTracks.count > 0 || self.miniStreamingArtists.count > 0) {
             self.miniStreamingTracks = @[];
             self.miniStreamingArtists = @[];
@@ -4101,6 +4193,7 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     __weak typeof(self) weakSelf = self;
     __block NSArray<SonoraMiniStreamingTrack *> *resolvedTracks = self.miniStreamingTracks ?: @[];
     __block NSArray<SonoraMiniStreamingArtist *> *resolvedArtists = self.miniStreamingArtists ?: @[];
+    __block BOOL artistsSectionVisible = self.miniStreamingArtistsSectionVisible;
     __block BOOL tracksResolved = NO;
     __block BOOL artistsResolved = NO;
 
@@ -4113,7 +4206,8 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
             return;
         }
         strongSelf.miniStreamingTracks = resolvedTracks ?: @[];
-        strongSelf.miniStreamingArtists = resolvedArtists ?: @[];
+        strongSelf.miniStreamingArtistsSectionVisible = artistsSectionVisible;
+        strongSelf.miniStreamingArtists = artistsSectionVisible ? (resolvedArtists ?: @[]) : @[];
         [strongSelf applySearchFilterAndReload];
     };
 
@@ -4127,6 +4221,10 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
 
         (void)error;
         resolvedTracks = tracks ?: @[];
+        artistsSectionVisible = strongSelf.miniStreamingClient.artistsSectionEnabled;
+        if (!artistsSectionVisible) {
+            resolvedArtists = @[];
+        }
         tracksResolved = YES;
         commitIfReady();
     }];
@@ -4141,6 +4239,10 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
 
         (void)error;
         resolvedArtists = artists ?: @[];
+        artistsSectionVisible = strongSelf.miniStreamingClient.artistsSectionEnabled;
+        if (!artistsSectionVisible) {
+            resolvedArtists = @[];
+        }
         artistsResolved = YES;
         commitIfReady();
     }];
@@ -5178,6 +5280,7 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(searchButtonTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(searchItem, @"Search");
         self.navigationItem.rightBarButtonItems = @[searchItem];
         return;
     }
@@ -5187,15 +5290,18 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(cancelMusicSelectionTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(cancelItem, @"Cancel Selection");
         UIBarButtonItem *favoriteItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"heart.fill"]
                                                                           style:UIBarButtonItemStylePlain
                                                                          target:self
                                                                          action:@selector(favoriteSelectedTracksTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(favoriteItem, @"Favorite Selected");
         favoriteItem.tintColor = [UIColor colorWithRed:1.0 green:0.35 blue:0.42 alpha:1.0];
         UIBarButtonItem *deleteItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"trash.fill"]
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(deleteSelectedTracksTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(deleteItem, @"Delete Selected");
         self.navigationItem.rightBarButtonItems = @[cancelItem, deleteItem, favoriteItem];
         return;
     }
@@ -5203,10 +5309,12 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     UIBarButtonItem *addItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
                                                                                target:self
                                                                                action:@selector(addMusicTapped)];
+    SonoraConfigureNavigationIconBarButtonItem(addItem, @"Add Music");
     UIBarButtonItem *searchItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
                                                                     style:UIBarButtonItemStylePlain
                                                                    target:self
                                                                    action:@selector(searchButtonTapped)];
+    SonoraConfigureNavigationIconBarButtonItem(searchItem, @"Search");
     self.navigationItem.rightBarButtonItems = @[searchItem, addItem];
 }
 
@@ -6251,10 +6359,12 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraWhiteSectionTitleLabel(@"Favorites")];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
+    UIBarButtonItem *searchItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
                                                                                style:UIBarButtonItemStylePlain
                                                                               target:self
                                                                               action:@selector(searchButtonTapped)];
+    SonoraConfigureNavigationIconBarButtonItem(searchItem, @"Search");
+    self.navigationItem.rightBarButtonItem = searchItem;
 
     [self setupTableView];
     [self setupSearch];
@@ -6430,25 +6540,28 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(cancelFavoritesSelectionTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(cancelItem, @"Cancel Selection");
         UIBarButtonItem *favoriteItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"heart.fill"]
                                                                           style:UIBarButtonItemStylePlain
                                                                          target:self
                                                                          action:@selector(favoriteSelectedFavoritesTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(favoriteItem, @"Favorite Selected");
         favoriteItem.tintColor = [UIColor colorWithRed:1.0 green:0.35 blue:0.42 alpha:1.0];
         UIBarButtonItem *deleteItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"trash.fill"]
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(removeSelectedFavoritesTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(deleteItem, @"Delete Selected");
         self.navigationItem.rightBarButtonItems = @[cancelItem, deleteItem, favoriteItem];
         return;
     }
 
-    self.navigationItem.rightBarButtonItems = @[
-        [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
-                                         style:UIBarButtonItemStylePlain
-                                        target:self
-                                        action:@selector(searchButtonTapped)]
-    ];
+    UIBarButtonItem *searchItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
+                                                                    style:UIBarButtonItemStylePlain
+                                                                   target:self
+                                                                   action:@selector(searchButtonTapped)];
+    SonoraConfigureNavigationIconBarButtonItem(searchItem, @"Search");
+    self.navigationItem.rightBarButtonItems = @[searchItem];
 }
 
 - (void)cancelFavoritesSelectionTapped {
@@ -7494,15 +7607,18 @@ replacementString:(NSString *)string {
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(cancelPlaylistSelectionTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(cancelItem, @"Cancel Selection");
         UIBarButtonItem *favoriteItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"heart.fill"]
                                                                           style:UIBarButtonItemStylePlain
                                                                          target:self
                                                                          action:@selector(favoriteSelectedPlaylistTracksTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(favoriteItem, @"Favorite Selected");
         favoriteItem.tintColor = [UIColor colorWithRed:1.0 green:0.35 blue:0.42 alpha:1.0];
         UIBarButtonItem *deleteItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"trash.fill"]
                                                                         style:UIBarButtonItemStylePlain
                                                                        target:self
                                                                        action:@selector(removeSelectedPlaylistTracksTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(deleteItem, @"Delete Selected");
         UIBarButtonItem *tightSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace
                                                                                       target:nil
                                                                                       action:nil];
@@ -7847,15 +7963,19 @@ replacementString:(NSString *)string {
         optionsImage = [UIImage imageNamed:@"tab_ellipsis"];
     }
     if (optionsImage != nil) {
-        self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:optionsImage
-                                                                                   style:UIBarButtonItemStylePlain
-                                                                                  target:self
-                                                                                  action:@selector(optionsTapped)];
+        UIBarButtonItem *optionsItem = [[UIBarButtonItem alloc] initWithImage:optionsImage
+                                                                         style:UIBarButtonItemStylePlain
+                                                                        target:self
+                                                                        action:@selector(optionsTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(optionsItem, @"Playlist Options");
+        self.navigationItem.rightBarButtonItem = optionsItem;
     } else {
-        self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"..."
-                                                                                   style:UIBarButtonItemStylePlain
-                                                                                  target:self
-                                                                                  action:@selector(optionsTapped)];
+        UIBarButtonItem *optionsItem = [[UIBarButtonItem alloc] initWithTitle:@"..."
+                                                                         style:UIBarButtonItemStylePlain
+                                                                        target:self
+                                                                        action:@selector(optionsTapped)];
+        SonoraConfigureNavigationIconBarButtonItem(optionsItem, @"Playlist Options");
+        self.navigationItem.rightBarButtonItem = optionsItem;
     }
 }
 

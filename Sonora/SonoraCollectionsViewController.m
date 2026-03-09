@@ -33,6 +33,25 @@ static UIFont *SonoraCollectionsYSMusicFont(CGFloat size) {
     return [UIFont boldSystemFontOfSize:size];
 }
 
+static UIView *SonoraCollectionsNavigationTitleView(NSString *text) {
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.text = text;
+    titleLabel.textColor = UIColor.labelColor;
+    titleLabel.font = SonoraCollectionsYSMusicFont(30.0);
+    [titleLabel sizeToFit];
+
+    if (@available(iOS 26.0, *)) {
+        CGFloat horizontalPadding = 10.0;
+        CGFloat width = ceil(CGRectGetWidth(titleLabel.bounds)) + (horizontalPadding * 2.0);
+        CGFloat height = ceil(CGRectGetHeight(titleLabel.bounds));
+        UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, width, height)];
+        titleLabel.frame = CGRectMake(horizontalPadding, 0.0, ceil(CGRectGetWidth(titleLabel.bounds)), height);
+        [container addSubview:titleLabel];
+        return container;
+    }
+    return titleLabel;
+}
+
 static UIViewController * _Nullable SonoraInstantiatePlaylistDetailViewController(NSString *playlistID) {
     Class detailClass = NSClassFromString(@"SonoraPlaylistDetailViewController");
     if (detailClass == Nil || ![detailClass isSubclassOfClass:UIViewController.class]) {
@@ -690,12 +709,7 @@ static NSArray<NSString *> *SonoraCollectionsArtistParticipants(NSString *artist
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.view.backgroundColor = UIColor.systemBackgroundColor;
 
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.text = @"Collections";
-    titleLabel.textColor = UIColor.labelColor;
-    titleLabel.font = SonoraCollectionsYSMusicFont(30.0);
-    [titleLabel sizeToFit];
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:titleLabel];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraCollectionsNavigationTitleView(@"Collections")];
 }
 
 - (void)setupCollectionView {
