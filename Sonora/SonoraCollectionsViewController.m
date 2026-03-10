@@ -15,6 +15,7 @@ static NSString * const SonoraCollectionsFavoritesSummaryCellReuseID = @"SonoraC
 static NSString * const SonoraCollectionsFavoriteTrackCellReuseID = @"SonoraCollectionsFavoriteTrackCell";
 static NSString * const SonoraCollectionsHeaderReuseID = @"SonoraCollectionsHeader";
 static NSString * const SonoraCollectionsHeaderKind = @"SonoraCollectionsHeaderKind";
+static NSString * const SonoraCollectionsCacheOnlinePlaylistTracksKey = @"sonora.settings.cacheOnlinePlaylistTracks";
 
 typedef NS_ENUM(NSInteger, SonoraCollectionsSection) {
     SonoraCollectionsSectionFavoritesSummary = 0,
@@ -24,6 +25,55 @@ typedef NS_ENUM(NSInteger, SonoraCollectionsSection) {
     SonoraCollectionsSectionAlbums = 4,
     SonoraCollectionsSectionMyMusic = 5,
 };
+
+static id SonoraCollectionsSharedPlaylistStore(void) {
+    Class storeClass = NSClassFromString(@"SonoraSharedPlaylistStore");
+    if (storeClass == Nil) {
+        return nil;
+    }
+    return [storeClass performSelector:@selector(sharedStore)];
+}
+
+static NSArray<SonoraPlaylist *> *SonoraCollectionsLikedSharedPlaylists(void) {
+    id store = SonoraCollectionsSharedPlaylistStore();
+    if (![store respondsToSelector:@selector(likedPlaylists)]) {
+        return @[];
+    }
+    id playlists = [store performSelector:@selector(likedPlaylists)];
+    return [playlists isKindOfClass:NSArray.class] ? playlists : @[];
+}
+
+static id SonoraCollectionsSharedSnapshotForPlaylistID(NSString *playlistID) {
+    id store = SonoraCollectionsSharedPlaylistStore();
+    if (playlistID.length == 0 || ![store respondsToSelector:@selector(snapshotForPlaylistID:)]) {
+        return nil;
+    }
+    return [store performSelector:@selector(snapshotForPlaylistID:) withObject:playlistID];
+}
+
+static NSString *SonoraCollectionsSharedPlaylistSubtitle(id sharedSnapshot) {
+    NSArray<SonoraTrack *> *tracks = [sharedSnapshot valueForKey:@"tracks"];
+    NSUInteger totalTracks = [tracks isKindOfClass:NSArray.class] ? tracks.count : 0;
+    if (![NSUserDefaults.standardUserDefaults boolForKey:SonoraCollectionsCacheOnlinePlaylistTracksKey]) {
+        return @"Online playlist • Streaming";
+    }
+    NSUInteger cachedTracks = 0;
+    for (SonoraTrack *track in tracks) {
+        if (track.url.isFileURL && track.url.path.length > 0 &&
+            [NSFileManager.defaultManager fileExistsAtPath:track.url.path]) {
+            cachedTracks += 1;
+        }
+    }
+    if (totalTracks == 0) {
+        return @"Online playlist";
+    }
+    if (cachedTracks >= totalTracks) {
+        return @"Online playlist • Cached";
+    }
+    return [NSString stringWithFormat:@"Online playlist • Cached %lu/%lu",
+            (unsigned long)cachedTracks,
+            (unsigned long)totalTracks];
+}
 
 static UIFont *SonoraCollectionsYSMusicFont(CGFloat size) {
     UIFont *font = [UIFont fontWithName:@"YSMusic-HeadlineBold" size:size];
@@ -890,7 +940,12 @@ static NSArray<NSString *> *SonoraCollectionsArtistParticipants(NSString *artist
 - (void)reloadCollections {
     SonoraPlaylistStore *playlistStore = SonoraPlaylistStore.sharedStore;
     [playlistStore reloadPlaylists];
-    self.playlists = playlistStore.playlists ?: @[];
+    NSMutableArray<SonoraPlaylist *> *playlists = [(playlistStore.playlists ?: @[]) mutableCopy];
+    NSArray<SonoraPlaylist *> *likedSharedPlaylists = SonoraCollectionsLikedSharedPlaylists();
+    if (likedSharedPlaylists.count > 0) {
+        [playlists addObjectsFromArray:likedSharedPlaylists];
+    }
+    self.playlists = [playlists copy];
 
     SonoraLibraryManager *library = SonoraLibraryManager.sharedManager;
     if (library.tracks.count == 0 && SonoraFavoritesStore.sharedStore.favoriteTrackIDs.count > 0) {
@@ -1131,10 +1186,22 @@ static NSArray<NSString *> *SonoraCollectionsArtistParticipants(NSString *artist
                                                                                              forIndexPath:indexPath];
             if (indexPath.item < self.playlists.count) {
                 SonoraPlaylist *playlist = self.playlists[indexPath.item];
-                UIImage *cover = [SonoraPlaylistStore.sharedStore coverForPlaylist:playlist
-                                                                       library:SonoraLibraryManager.sharedManager
-                                                                          size:CGSizeMake(220.0, 220.0)];
-                [cell configureWithPlaylist:playlist cover:cover];
+                id sharedSnapshot = SonoraCollectionsSharedSnapshotForPlaylistID(playlist.playlistID);
+                if (sharedSnapshot != nil) {
+                    NSArray<SonoraTrack *> *sharedTracks = [sharedSnapshot valueForKey:@"tracks"];
+                    UIImage *cover = [sharedSnapshot valueForKey:@"coverImage"];
+                    if (cover == nil && [sharedTracks isKindOfClass:NSArray.class]) {
+                        cover = sharedTracks.firstObject.artwork;
+                    }
+                    [cell configureWithTitle:playlist.name
+                                    subtitle:SonoraCollectionsSharedPlaylistSubtitle(sharedSnapshot)
+                                       cover:cover];
+                } else {
+                    UIImage *cover = [SonoraPlaylistStore.sharedStore coverForPlaylist:playlist
+                                                                           library:SonoraLibraryManager.sharedManager
+                                                                              size:CGSizeMake(220.0, 220.0)];
+                    [cell configureWithPlaylist:playlist cover:cover];
+                }
             } else {
                 [cell configureAsCreatePlaylistCard];
             }

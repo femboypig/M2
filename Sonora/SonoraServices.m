@@ -3547,6 +3547,13 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
 
 - (MPRemoteCommandHandlerStatus)handleRemotePlay:(MPRemoteCommandEvent *)event {
     (void)event;
+    BOOL hasNowPlayingContext = (self.currentTrack != nil ||
+                                 self.audioPlayer != nil ||
+                                 self.streamingPlayer != nil ||
+                                 self.queue.count > 0);
+    if (!hasNowPlayingContext) {
+        return MPRemoteCommandHandlerStatusNoSuchContent;
+    }
 
     if ((self.audioPlayer != nil || self.streamingPlayer != nil) && !self.isPlaying) {
         [self togglePlayPause];
@@ -3557,10 +3564,6 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
         return MPRemoteCommandHandlerStatusSuccess;
     }
 
-    if (self.queue.count == 0) {
-        return MPRemoteCommandHandlerStatusNoSuchContent;
-    }
-
     if ([self isPlaceholderTrack:self.currentTrack]) {
         self.placeholderPlaybackActive = YES;
         [self updateNowPlayingInfo];
@@ -3569,26 +3572,31 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
         return MPRemoteCommandHandlerStatusSuccess;
     }
 
-    if (self.currentIndex == NSNotFound) {
+    if (self.queue.count > 0 && self.currentIndex == NSNotFound) {
         self.currentIndex = 0;
     }
 
-    [self startCurrentTrack];
+    if (self.queue.count > 0) {
+        [self startCurrentTrack];
+    }
     return MPRemoteCommandHandlerStatusSuccess;
 }
 
 - (MPRemoteCommandHandlerStatus)handleRemotePause:(MPRemoteCommandEvent *)event {
     (void)event;
+    BOOL hasNowPlayingContext = (self.currentTrack != nil ||
+                                 self.audioPlayer != nil ||
+                                 self.streamingPlayer != nil ||
+                                 self.queue.count > 0);
+    if (!hasNowPlayingContext) {
+        return MPRemoteCommandHandlerStatusNoSuchContent;
+    }
 
     if (self.audioPlayer != nil || self.streamingPlayer != nil) {
         if (self.isPlaying) {
             [self togglePlayPause];
         }
         return MPRemoteCommandHandlerStatusSuccess;
-    }
-
-    if (self.queue.count == 0) {
-        return MPRemoteCommandHandlerStatusNoSuchContent;
     }
 
     if ([self isPlaceholderTrack:self.currentTrack]) {
@@ -3602,6 +3610,13 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
 
 - (MPRemoteCommandHandlerStatus)handleRemoteToggle:(MPRemoteCommandEvent *)event {
     (void)event;
+    BOOL hasNowPlayingContext = (self.currentTrack != nil ||
+                                 self.audioPlayer != nil ||
+                                 self.streamingPlayer != nil ||
+                                 self.queue.count > 0);
+    if (!hasNowPlayingContext) {
+        return MPRemoteCommandHandlerStatusNoSuchContent;
+    }
     [self togglePlayPause];
     return MPRemoteCommandHandlerStatusSuccess;
 }
@@ -3658,6 +3673,15 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
         info[MPMediaItemPropertyArtist] = track.artist;
     }
     NSTimeInterval duration = self.duration;
+    if ((!isfinite(duration) || duration <= 0.0) && self.audioPlayer != nil) {
+        duration = self.audioPlayer.duration;
+    }
+    if ((!isfinite(duration) || duration <= 0.0) && self.streamingPlayer.currentItem != nil) {
+        NSTimeInterval streamDuration = CMTimeGetSeconds(self.streamingPlayer.currentItem.duration);
+        if (isfinite(streamDuration) && streamDuration > 0.0) {
+            duration = streamDuration;
+        }
+    }
     NSTimeInterval elapsed = self.currentTime;
     if (!isfinite(duration) || duration < 0.0) {
         duration = 0.0;
@@ -3668,9 +3692,14 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
     if (duration > 0.0) {
         elapsed = MIN(elapsed, duration);
     }
-    info[MPMediaItemPropertyPlaybackDuration] = @(duration);
+    if (duration > 0.0) {
+        info[MPMediaItemPropertyPlaybackDuration] = @(duration);
+    }
     info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(elapsed);
     info[MPNowPlayingInfoPropertyPlaybackRate] = self.isPlaying ? @1.0 : @0.0;
+    if (@available(iOS 10.0, *)) {
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = @1.0;
+    }
     NSInteger queueCount = (NSInteger)self.queue.count;
     NSInteger queueIndex = self.currentIndex;
     if (queueCount > 0) {
@@ -3697,13 +3726,27 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
 - (void)updateRemoteCommandAvailability {
     MPRemoteCommandCenter *center = MPRemoteCommandCenter.sharedCommandCenter;
     BOOL hasQueue = (self.queue.count > 0);
-    center.playCommand.enabled = YES;
-    center.pauseCommand.enabled = YES;
-    center.togglePlayPauseCommand.enabled = YES;
-    center.nextTrackCommand.enabled = hasQueue;
-    center.previousTrackCommand.enabled = hasQueue;
+    BOOL hasTrack = (self.currentTrack != nil);
+    BOOL hasPlayer = (self.audioPlayer != nil || self.streamingPlayer != nil);
+    BOOL hasNowPlayingContext = (hasTrack || hasPlayer || hasQueue);
+    NSTimeInterval duration = self.duration;
+    if ((!isfinite(duration) || duration <= 0.0) && self.audioPlayer != nil) {
+        duration = self.audioPlayer.duration;
+    }
+    if ((!isfinite(duration) || duration <= 0.0) && self.streamingPlayer.currentItem != nil) {
+        NSTimeInterval streamDuration = CMTimeGetSeconds(self.streamingPlayer.currentItem.duration);
+        if (isfinite(streamDuration) && streamDuration > 0.0) {
+            duration = streamDuration;
+        }
+    }
+    BOOL canSeek = (hasNowPlayingContext && isfinite(duration) && duration > 0.0);
+    center.playCommand.enabled = hasNowPlayingContext && !self.isPlaying;
+    center.pauseCommand.enabled = hasNowPlayingContext && self.isPlaying;
+    center.togglePlayPauseCommand.enabled = hasNowPlayingContext;
+    center.nextTrackCommand.enabled = hasNowPlayingContext;
+    center.previousTrackCommand.enabled = hasNowPlayingContext;
     if (@available(iOS 9.1, *)) {
-        center.changePlaybackPositionCommand.enabled = hasQueue;
+        center.changePlaybackPositionCommand.enabled = canSeek;
     }
 }
 

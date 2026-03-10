@@ -8,6 +8,7 @@
 #import "SceneDelegate.h"
 
 #import "AppDelegate.h"
+#import "SonoraMusicModule.h"
 #import "ViewController.h"
 #import "SonoraServices.h"
 #import "SonoraWidgetBridge.h"
@@ -150,6 +151,9 @@ static UIImage *SonoraAppIconImage(UITraitCollection *traitCollection) {
     }
 
     BOOL handled = [SonoraWidgetBridge handleWidgetDeepLinkURL:url];
+    if (!handled) {
+        handled = SonoraHandleMusicModuleDeepLinkURL(url);
+    }
     if (handled) {
         self.pendingWidgetURL = nil;
     }

@@ -1686,6 +1686,8 @@ static NSString * const SonoraSettingsArtworkStyleKey = @"sonora.settings.artwor
 static NSString * const SonoraSettingsArtworkEqualizerKey = @"sonora.settings.showArtworkEqualizer";
 static NSString * const SonoraSettingsTrackGapKey = @"sonora.settings.trackGapSeconds";
 static NSString * const SonoraSettingsMaxStorageMBKey = @"sonora.settings.maxStorageMB";
+static NSString * const SonoraSettingsCacheOnlinePlaylistTracksKey = @"sonora.settings.cacheOnlinePlaylistTracks";
+static NSString * const SonoraSettingsOnlinePlaylistCacheMaxMBKey = @"sonora.settings.onlinePlaylistCacheMaxMB";
 static NSString * const SonoraSettingsPreservePlayerModesKey = @"sonora.settings.preservePlayerModes";
 static NSString * const SonoraBackupArchiveMagicString = @"SONORAAR";
 static NSString * const SonoraBackupManifestEntryName = @"meta/manifest.v1";
@@ -1700,10 +1702,13 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 @property (nonatomic, strong) UISegmentedControl *artworkStyleControl;
 @property (nonatomic, strong) UISwitch *artworkEqualizerSwitch;
 @property (nonatomic, strong) UISwitch *preservePlayerModesSwitch;
+@property (nonatomic, strong) UISwitch *onlinePlaylistCacheTracksSwitch;
 @property (nonatomic, strong) UILabel *accentColorValueLabel;
 @property (nonatomic, strong) UILabel *trackGapValueLabel;
 @property (nonatomic, strong) UILabel *usedStorageValueLabel;
 @property (nonatomic, strong) UILabel *maxStorageValueLabel;
+@property (nonatomic, strong) UILabel *onlinePlaylistCacheUsedValueLabel;
+@property (nonatomic, strong) UILabel *onlinePlaylistCacheValueLabel;
 @property (nonatomic, strong, nullable) NSURL *pendingBackupExportURL;
 @property (nonatomic, assign) BOOL backupPickerImportMode;
 
@@ -1818,6 +1823,36 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [memoryStack addArrangedSubview:[self switchRowWithTitle:@"Preserve player settings"
                                                     subtitle:@"Keep shuffle/repeat after app restart"
                                                      control:preservePlayerModesSwitch]];
+
+    [contentStack addArrangedSubview:[self sectionHeadingWithText:@"Cache"]];
+    UIStackView *cacheStack = [self addSectionCardToStack:contentStack];
+
+    UISwitch *onlinePlaylistCacheTracksSwitch = [[UISwitch alloc] init];
+    [onlinePlaylistCacheTracksSwitch addTarget:self action:@selector(cacheOnlinePlaylistTracksChanged:) forControlEvents:UIControlEventValueChanged];
+    self.onlinePlaylistCacheTracksSwitch = onlinePlaylistCacheTracksSwitch;
+    [cacheStack addArrangedSubview:[self switchRowWithTitle:@"Cache tracks from online playlists"
+                                                   subtitle:@"Keep liked shared playlists available offline"
+                                                    control:onlinePlaylistCacheTracksSwitch]];
+
+    UILabel *onlinePlaylistCacheUsedValue = [self valueLabel];
+    self.onlinePlaylistCacheUsedValueLabel = onlinePlaylistCacheUsedValue;
+    [cacheStack addArrangedSubview:[self infoRowWithTitle:@"Used by online playlists"
+                                                    value:@"0 MB"
+                                               valueLabel:onlinePlaylistCacheUsedValue]];
+
+    UILabel *onlinePlaylistCacheValue = [self valueLabel];
+    self.onlinePlaylistCacheValueLabel = onlinePlaylistCacheValue;
+    [cacheStack addArrangedSubview:[self selectableValueRowWithTitle:@"Max online cache space"
+                                                            subtitle:@""
+                                                          valueLabel:onlinePlaylistCacheValue
+                                                              action:@selector(selectOnlinePlaylistCacheTapped)]];
+
+    UILabel *clearOnlinePlaylistCacheValue = [self valueLabel];
+    clearOnlinePlaylistCacheValue.text = @"Delete";
+    [cacheStack addArrangedSubview:[self selectableValueRowWithTitle:@"Clear online cache"
+                                                            subtitle:@"Remove downloaded tracks from shared playlists"
+                                                          valueLabel:clearOnlinePlaylistCacheValue
+                                                              action:@selector(clearOnlinePlaylistCacheTapped)]];
 
     [contentStack addArrangedSubview:[self sectionHeadingWithText:@"Backup"]];
     UIStackView *backupStack = [self addSectionCardToStack:contentStack];
@@ -2094,6 +2129,8 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     BOOL preserveModes = [defaults objectForKey:SonoraSettingsPreservePlayerModesKey] ? [defaults boolForKey:SonoraSettingsPreservePlayerModesKey] : YES;
     double trackGap = [defaults objectForKey:SonoraSettingsTrackGapKey] ? [defaults doubleForKey:SonoraSettingsTrackGapKey] : 0.0;
     NSInteger maxStorageMB = [defaults objectForKey:SonoraSettingsMaxStorageMBKey] ? [defaults integerForKey:SonoraSettingsMaxStorageMBKey] : -1;
+    BOOL cacheOnlinePlaylistTracks = [defaults objectForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] ? [defaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] : NO;
+    NSInteger onlinePlaylistCacheMaxMB = [defaults objectForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] ? [defaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] : 1024;
 
     if (font > 1) {
         font = 0;
@@ -2104,13 +2141,18 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     self.artworkStyleControl.selectedSegmentIndex = MAX(0, MIN(1, artworkStyle));
     self.artworkEqualizerSwitch.on = artworkEqualizerEnabled;
     self.preservePlayerModesSwitch.on = preserveModes;
+    self.onlinePlaylistCacheTracksSwitch.on = cacheOnlinePlaylistTracks;
 
     double snappedGap = [self nearestTrackGapValueForValue:trackGap];
     NSInteger snappedMaxStorage = [self nearestMaxStorageValueForValue:maxStorageMB];
+    NSInteger snappedOnlinePlaylistCache = [self nearestMaxStorageValueForValue:onlinePlaylistCacheMaxMB];
     [defaults setDouble:snappedGap forKey:SonoraSettingsTrackGapKey];
     [defaults setInteger:snappedMaxStorage forKey:SonoraSettingsMaxStorageMBKey];
+    [defaults setInteger:snappedOnlinePlaylistCache forKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
     [self refreshTrackGapLabel];
     [self refreshMaxStorageLabel];
+    [self refreshOnlinePlaylistCacheUsageLabel];
+    [self refreshOnlinePlaylistCacheLabel];
     [self refreshAccentColorLabel];
 }
 
@@ -2126,6 +2168,17 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 
 - (void)preservePlayerModesChanged:(UISwitch *)sender {
     [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:SonoraSettingsPreservePlayerModesKey];
+}
+
+- (void)cacheOnlinePlaylistTracksChanged:(UISwitch *)sender {
+    [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:SonoraSettingsCacheOnlinePlaylistTracksKey];
+    [self trimSharedPlaylistAudioCacheToLimitBytes:(sender.isOn ? [self onlinePlaylistCacheLimitBytes] : 0)];
+    [self refreshOnlinePlaylistCacheUsageLabel];
+    if (sender.isOn) {
+        [self refreshSharedPlaylistAudioCacheIfNeeded];
+    }
+    [self notifyPlayerSettingsChanged];
+    [NSNotificationCenter.defaultCenter postNotificationName:SonoraPlaylistsDidChangeNotification object:nil];
 }
 
 - (UIColor *)currentAccentColor {
@@ -2251,6 +2304,52 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
+- (void)selectOnlinePlaylistCacheTapped {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger current = [self nearestMaxStorageValueForValue:[defaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey]];
+
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Max online cache space"
+                                                                   message:[NSString stringWithFormat:@"Current: %@", [self storageLabelForMB:current]]
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSNumber *value in [self maxStorageOptionValues]) {
+        NSInteger sizeMB = value.integerValue;
+        NSString *title = [self storageLabelForMB:sizeMB];
+        [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction * _Nonnull action) {
+            [NSUserDefaults.standardUserDefaults setInteger:sizeMB forKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
+            [self refreshOnlinePlaylistCacheLabel];
+            if (self.onlinePlaylistCacheTracksSwitch.isOn) {
+                [self trimSharedPlaylistAudioCacheToLimitBytes:[self onlinePlaylistCacheLimitBytes]];
+                [self refreshOnlinePlaylistCacheUsageLabel];
+                [self refreshSharedPlaylistAudioCacheIfNeeded];
+                [NSNotificationCenter.defaultCenter postNotificationName:SonoraPlaylistsDidChangeNotification object:nil];
+            }
+            [self notifyPlayerSettingsChanged];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [self configurePopoverForSheet:sheet];
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)clearOnlinePlaylistCacheTapped {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Clear online cache"
+                                                                   message:@"Delete downloaded tracks from shared playlists on this device?"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Delete"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        [self trimSharedPlaylistAudioCacheToLimitBytes:0];
+        [self refreshOnlinePlaylistCacheUsageLabel];
+        [self notifyPlayerSettingsChanged];
+        [NSNotificationCenter.defaultCenter postNotificationName:SonoraPlaylistsDidChangeNotification object:nil];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [self configurePopoverForSheet:alert];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)configurePopoverForSheet:(UIAlertController *)sheet {
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
     if (popover == nil) {
@@ -2339,6 +2438,58 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     self.maxStorageValueLabel.text = [self storageLabelForMB:[self nearestMaxStorageValueForValue:value]];
 }
 
+- (void)refreshOnlinePlaylistCacheLabel {
+    NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
+    self.onlinePlaylistCacheValueLabel.text = [self storageLabelForMB:[self nearestMaxStorageValueForValue:value]];
+}
+
+- (void)refreshSharedPlaylistAudioCacheIfNeeded {
+    Class sharedPlaylistStoreClass = NSClassFromString(@"SonoraSharedPlaylistStore");
+    if (sharedPlaylistStoreClass == Nil) {
+        return;
+    }
+    id sharedPlaylistStore = [sharedPlaylistStoreClass performSelector:@selector(sharedStore)];
+    if (![sharedPlaylistStore respondsToSelector:@selector(refreshAllPersistentCachesIfNeeded)]) {
+        return;
+    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [sharedPlaylistStore performSelector:@selector(refreshAllPersistentCachesIfNeeded)];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self refreshOnlinePlaylistCacheUsageLabel];
+        });
+    });
+}
+
+- (unsigned long long)currentOnlinePlaylistCacheUsageBytes {
+    NSString *directory = [self sharedPlaylistAudioCacheDirectoryPath];
+    NSDirectoryEnumerator<NSURL *> *enumerator =
+        [NSFileManager.defaultManager enumeratorAtURL:[NSURL fileURLWithPath:directory]
+                           includingPropertiesForKeys:@[NSURLIsRegularFileKey, NSURLFileSizeKey]
+                                              options:NSDirectoryEnumerationSkipsHiddenFiles
+                                         errorHandler:nil];
+    unsigned long long totalBytes = 0;
+    for (NSURL *fileURL in enumerator) {
+        NSNumber *isRegularFile = nil;
+        [fileURL getResourceValue:&isRegularFile forKey:NSURLIsRegularFileKey error:nil];
+        if (![isRegularFile boolValue]) {
+            continue;
+        }
+        NSNumber *fileSize = nil;
+        [fileURL getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil];
+        totalBytes += MAX(fileSize.unsignedLongLongValue, 0);
+    }
+    return totalBytes;
+}
+
+- (void)refreshOnlinePlaylistCacheUsageLabel {
+    unsigned long long usedBytes = [self currentOnlinePlaylistCacheUsageBytes];
+    self.onlinePlaylistCacheUsedValueLabel.text = [NSByteCountFormatter stringFromByteCount:(long long)usedBytes
+                                                                                  countStyle:NSByteCountFormatterCountStyleFile];
+    unsigned long long maxBytes = [self onlinePlaylistCacheLimitBytes];
+    BOOL overLimit = (self.onlinePlaylistCacheTracksSwitch.isOn && maxBytes != ULLONG_MAX && usedBytes > maxBytes);
+    self.onlinePlaylistCacheUsedValueLabel.textColor = overLimit ? UIColor.systemRedColor : UIColor.labelColor;
+}
+
 - (void)refreshStorageUsage {
     unsigned long long usedBytes = [self currentLibraryUsageBytes];
     self.usedStorageValueLabel.text = [NSByteCountFormatter stringFromByteCount:(long long)usedBytes
@@ -2354,6 +2505,62 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         return ULLONG_MAX;
     }
     return ((unsigned long long)maxMB) * 1024ULL * 1024ULL;
+}
+
+- (NSString *)sharedPlaylistAudioCacheDirectoryPath {
+    NSArray<NSString *> *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    NSString *base = paths.firstObject ?: NSTemporaryDirectory();
+    NSString *directory = [[base stringByAppendingPathComponent:@"SonoraSharedPlaylists"] stringByAppendingPathComponent:@"audio"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+    return directory;
+}
+
+- (unsigned long long)onlinePlaylistCacheLimitBytes {
+    NSInteger maxMB = [self nearestMaxStorageValueForValue:[NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey]];
+    if (maxMB <= 0) {
+        return ULLONG_MAX;
+    }
+    return ((unsigned long long)maxMB) * 1024ULL * 1024ULL;
+}
+
+- (void)trimSharedPlaylistAudioCacheToLimitBytes:(unsigned long long)limitBytes {
+    NSString *directory = [self sharedPlaylistAudioCacheDirectoryPath];
+    NSArray<NSURL *> *files = [NSFileManager.defaultManager contentsOfDirectoryAtURL:[NSURL fileURLWithPath:directory]
+                                                          includingPropertiesForKeys:@[NSURLIsRegularFileKey, NSURLContentModificationDateKey, NSURLFileSizeKey]
+                                                                             options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                               error:nil];
+    NSMutableArray<NSDictionary<NSString *, id> *> *entries = [NSMutableArray array];
+    unsigned long long totalBytes = 0;
+    for (NSURL *fileURL in files) {
+        NSNumber *isRegularFile = nil;
+        [fileURL getResourceValue:&isRegularFile forKey:NSURLIsRegularFileKey error:nil];
+        if (![isRegularFile boolValue]) {
+            continue;
+        }
+        NSNumber *fileSize = nil;
+        NSDate *modifiedAt = nil;
+        [fileURL getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil];
+        [fileURL getResourceValue:&modifiedAt forKey:NSURLContentModificationDateKey error:nil];
+        unsigned long long currentSize = MAX(fileSize.unsignedLongLongValue, 0);
+        totalBytes += currentSize;
+        [entries addObject:@{
+            @"url": fileURL,
+            @"modifiedAt": modifiedAt ?: NSDate.distantPast,
+            @"size": @(currentSize)
+        }];
+    }
+    [entries sortUsingComparator:^NSComparisonResult(NSDictionary<NSString *,id> * _Nonnull lhs, NSDictionary<NSString *,id> * _Nonnull rhs) {
+        return [lhs[@"modifiedAt"] compare:rhs[@"modifiedAt"]];
+    }];
+    for (NSDictionary<NSString *, id> *entry in entries) {
+        if (limitBytes == ULLONG_MAX || totalBytes <= limitBytes) {
+            break;
+        }
+        NSURL *fileURL = entry[@"url"];
+        unsigned long long fileSize = [entry[@"size"] unsignedLongLongValue];
+        [NSFileManager.defaultManager removeItemAtURL:fileURL error:nil];
+        totalBytes = (totalBytes > fileSize) ? (totalBytes - fileSize) : 0;
+    }
 }
 
 - (void)presentStorageLimitExceededAlertIfNeeded {
@@ -2883,6 +3090,8 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     BOOL preserveModes = [defaults objectForKey:SonoraSettingsPreservePlayerModesKey] ? [defaults boolForKey:SonoraSettingsPreservePlayerModesKey] : YES;
     double trackGap = [defaults objectForKey:SonoraSettingsTrackGapKey] ? [defaults doubleForKey:SonoraSettingsTrackGapKey] : 0.0;
     NSInteger maxStorageMb = [defaults objectForKey:SonoraSettingsMaxStorageMBKey] ? [defaults integerForKey:SonoraSettingsMaxStorageMBKey] : -1;
+    BOOL cacheOnlinePlaylistTracks = [defaults objectForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] ? [defaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] : NO;
+    NSInteger onlinePlaylistCacheMaxMb = [defaults objectForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] ? [defaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] : 1024;
 
     NSDictionary<NSString *, id> *settings = @{
         @"fontStyle": (fontValue == 1 ? @"serif" : @"system"),
@@ -2891,6 +3100,8 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         @"preservePlayerModes": @(preserveModes),
         @"trackGapSeconds": @(trackGap),
         @"maxStorageMb": @(maxStorageMb),
+        @"cacheOnlinePlaylistTracks": @(cacheOnlinePlaylistTracks),
+        @"onlinePlaylistCacheMaxMb": @(onlinePlaylistCacheMaxMb),
         @"artworkEqualizer": @(artworkEqualizer)
     };
 
@@ -3169,6 +3380,20 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         }
         if ([maxStorageValue respondsToSelector:@selector(integerValue)]) {
             [defaults setInteger:[self nearestMaxStorageValueForValue:[maxStorageValue integerValue]] forKey:SonoraSettingsMaxStorageMBKey];
+        }
+
+        id cacheOnlinePlaylistTracksValue = settings[@"cacheOnlinePlaylistTracks"];
+        if ([cacheOnlinePlaylistTracksValue respondsToSelector:@selector(boolValue)]) {
+            [defaults setBool:[cacheOnlinePlaylistTracksValue boolValue] forKey:SonoraSettingsCacheOnlinePlaylistTracksKey];
+        }
+
+        id onlinePlaylistCacheMaxValue = settings[@"onlinePlaylistCacheMaxMb"];
+        if (onlinePlaylistCacheMaxValue == nil) {
+            onlinePlaylistCacheMaxValue = settings[@"onlinePlaylistCacheMaxMB"];
+        }
+        if ([onlinePlaylistCacheMaxValue respondsToSelector:@selector(integerValue)]) {
+            [defaults setInteger:[self nearestMaxStorageValueForValue:[onlinePlaylistCacheMaxValue integerValue]]
+                         forKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
         }
 
         id artworkEqualizerValue = settings[@"artworkEqualizer"];
