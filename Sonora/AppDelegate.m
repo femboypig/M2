@@ -10,6 +10,10 @@
 
 @interface AppDelegate ()
 
+- (nullable NSError *)loadPersistentStoresForContainer:(NSPersistentContainer *)container;
+- (BOOL)configurePersistentContainer:(NSPersistentContainer *)container;
+- (BOOL)analyticsStoreFilesExistAtURL:(NSURL *)storeURL;
+
 @end
 
 @implementation AppDelegate
@@ -65,23 +69,7 @@
             NSPersistentStoreDescription *storeDescription = _persistentContainer.persistentStoreDescriptions.firstObject;
             storeDescription.shouldMigrateStoreAutomatically = YES;
             storeDescription.shouldInferMappingModelAutomatically = YES;
-            [_persistentContainer loadPersistentStoresWithCompletionHandler:^(NSPersistentStoreDescription *storeDescription, NSError *error) {
-                if (error != nil) {
-                    // Replace this implementation with code to handle the error appropriately.
-                    // abort() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                    
-                    /*
-                     Typical reasons for an error here include:
-                     * The parent directory does not exist, cannot be created, or disallows writing.
-                     * The persistent store is not accessible, due to permissions or data protection when the device is locked.
-                     * The device is out of space.
-                     * The store could not be migrated to the current model version.
-                     Check the error message to determine what the actual problem was.
-                    */
-                    NSLog(@"Unresolved error %@, %@", error, error.userInfo);
-                    abort();
-                }
-            }];
+            [self configurePersistentContainer:_persistentContainer];
         }
     }
     
@@ -94,11 +82,84 @@
     NSManagedObjectContext *context = self.persistentContainer.viewContext;
     NSError *error = nil;
     if ([context hasChanges] && ![context save:&error]) {
-        // Replace this implementation with code to handle the error appropriately.
-        // abort() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-        NSLog(@"Unresolved error %@, %@", error, error.userInfo);
-        abort();
+        NSLog(@"Core Data save error %@, %@", error, error.userInfo);
+        [context rollback];
     }
+}
+
+- (nullable NSError *)loadPersistentStoresForContainer:(NSPersistentContainer *)container {
+    __block NSError *loadError = nil;
+    [container loadPersistentStoresWithCompletionHandler:^(__unused NSPersistentStoreDescription *storeDescription, NSError *error) {
+        if (error != nil) {
+            loadError = error;
+        }
+    }];
+    return loadError;
+}
+
+- (BOOL)configurePersistentContainer:(NSPersistentContainer *)container {
+    NSError *loadError = [self loadPersistentStoresForContainer:container];
+    if (loadError == nil) {
+        return YES;
+    }
+
+    NSLog(@"Core Data load error %@, %@", loadError, loadError.userInfo);
+
+    NSPersistentStoreDescription *storeDescription = container.persistentStoreDescriptions.firstObject;
+    NSURL *storeURL = storeDescription.URL;
+    if (storeURL.isFileURL && [self analyticsStoreFilesExistAtURL:storeURL]) {
+        NSError *destroyError = nil;
+        BOOL destroyed = [container.persistentStoreCoordinator destroyPersistentStoreAtURL:storeURL
+                                                                                  withType:storeDescription.type
+                                                                                   options:storeDescription.options
+                                                                                     error:&destroyError];
+        if (!destroyed) {
+            NSLog(@"Core Data reset error %@, %@", destroyError, destroyError.userInfo);
+        } else {
+            NSError *recoveryError = [self loadPersistentStoresForContainer:container];
+            if (recoveryError == nil) {
+                NSLog(@"Core Data store was reset after a load failure.");
+                return YES;
+            }
+            NSLog(@"Core Data recovery load error %@, %@", recoveryError, recoveryError.userInfo);
+        }
+    }
+
+    NSPersistentStoreDescription *inMemoryDescription = [NSPersistentStoreDescription new];
+    inMemoryDescription.type = NSInMemoryStoreType;
+    inMemoryDescription.shouldMigrateStoreAutomatically = YES;
+    inMemoryDescription.shouldInferMappingModelAutomatically = YES;
+    container.persistentStoreDescriptions = @[inMemoryDescription];
+
+    NSError *fallbackError = [self loadPersistentStoresForContainer:container];
+    if (fallbackError == nil) {
+        NSLog(@"Core Data is using an in-memory fallback store.");
+        return YES;
+    }
+
+    NSLog(@"Core Data in-memory fallback failed %@, %@", fallbackError, fallbackError.userInfo);
+    return NO;
+}
+
+- (BOOL)analyticsStoreFilesExistAtURL:(NSURL *)storeURL {
+    if (!storeURL.isFileURL || storeURL.path.length == 0) {
+        return NO;
+    }
+
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    NSString *storePath = storeURL.path;
+    NSArray<NSString *> *candidatePaths = @[
+        storePath,
+        [storePath stringByAppendingString:@"-shm"],
+        [storePath stringByAppendingString:@"-wal"]
+    ];
+    for (NSString *candidatePath in candidatePaths) {
+        if ([fileManager fileExistsAtPath:candidatePath]) {
+            return YES;
+        }
+    }
+
+    return NO;
 }
 
 @end
