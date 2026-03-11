@@ -2462,6 +2462,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 @property (nonatomic, strong) UILabel *onlinePlaylistCacheValueLabel;
 @property (nonatomic, strong, nullable) NSURL *pendingBackupExportURL;
 @property (nonatomic, assign) BOOL backupPickerImportMode;
+@property (nonatomic, assign) BOOL backupOperationInProgress;
 
 - (UIView *)selectableValueRowWithTitle:(NSString *)title
                                subtitle:(NSString *)subtitle
@@ -3487,37 +3488,70 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)exportBackupTapped {
-    NSError *archiveError = nil;
-    NSData *archiveData = [self backupArchiveDataWithError:&archiveError];
-    if (archiveData.length == 0) {
-        [self presentBackupErrorMessage:(archiveError.localizedDescription ?: @"Could not create backup archive.")];
+    if (self.backupOperationInProgress) {
         return;
     }
+    self.backupOperationInProgress = YES;
+    UIAlertController *progress = [UIAlertController alertControllerWithTitle:@"Backup"
+                                                                      message:@"Preparing archive..."
+                                                               preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:progress animated:YES completion:nil];
 
-    NSString *fileName = [self backupArchiveFileName];
-    NSString *temporaryPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
-    NSURL *temporaryURL = [NSURL fileURLWithPath:temporaryPath];
-    NSError *writeError = nil;
-    [archiveData writeToURL:temporaryURL options:NSDataWritingAtomic error:&writeError];
-    if (writeError != nil) {
-        [self presentBackupErrorMessage:(writeError.localizedDescription ?: @"Could not prepare backup file.")];
-        return;
-    }
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil) {
+            return;
+        }
 
-    UIDocumentPickerViewController *picker = nil;
-    if (@available(iOS 14.0, *)) {
-        picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[temporaryURL] asCopy:YES];
-    } else {
-        picker = [[UIDocumentPickerViewController alloc] initWithURL:temporaryURL inMode:UIDocumentPickerModeExportToService];
-    }
-    picker.delegate = self;
-    picker.modalPresentationStyle = UIModalPresentationFormSheet;
-    self.pendingBackupExportURL = temporaryURL;
-    self.backupPickerImportMode = NO;
-    [self presentViewController:picker animated:YES completion:nil];
+        NSError *archiveError = nil;
+        NSData *archiveData = [strongSelf backupArchiveDataWithError:&archiveError];
+        NSURL *temporaryURL = nil;
+        if (archiveData.length > 0) {
+            NSString *fileName = [strongSelf backupArchiveFileName];
+            NSString *temporaryPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+            temporaryURL = [NSURL fileURLWithPath:temporaryPath];
+            NSError *writeError = nil;
+            [archiveData writeToURL:temporaryURL options:NSDataWritingAtomic error:&writeError];
+            if (writeError != nil) {
+                archiveError = writeError;
+                temporaryURL = nil;
+            }
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) innerSelf = weakSelf;
+            if (innerSelf == nil) {
+                return;
+            }
+
+            innerSelf.backupOperationInProgress = NO;
+            [progress dismissViewControllerAnimated:YES completion:^{
+                if (temporaryURL == nil) {
+                    [innerSelf presentBackupErrorMessage:(archiveError.localizedDescription ?: @"Could not create backup archive.")];
+                    return;
+                }
+
+                UIDocumentPickerViewController *picker = nil;
+                if (@available(iOS 14.0, *)) {
+                    picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[temporaryURL] asCopy:YES];
+                } else {
+                    picker = [[UIDocumentPickerViewController alloc] initWithURL:temporaryURL inMode:UIDocumentPickerModeExportToService];
+                }
+                picker.delegate = innerSelf;
+                picker.modalPresentationStyle = UIModalPresentationFormSheet;
+                innerSelf.pendingBackupExportURL = temporaryURL;
+                innerSelf.backupPickerImportMode = NO;
+                [innerSelf presentViewController:picker animated:YES completion:nil];
+            }];
+        });
+    });
 }
 
 - (void)importBackupTapped {
+    if (self.backupOperationInProgress) {
+        return;
+    }
     UIDocumentPickerViewController *picker =
     [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.data"]
                                                            inMode:UIDocumentPickerModeImport];
@@ -3538,17 +3572,44 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 
     if (self.backupPickerImportMode) {
         BOOL hasScope = [selectedURL startAccessingSecurityScopedResource];
-        NSError *importError = nil;
-        BOOL imported = [self importBackupArchiveFromURL:selectedURL error:&importError];
-        if (hasScope) {
-            [selectedURL stopAccessingSecurityScopedResource];
-        }
+        self.backupOperationInProgress = YES;
+        UIAlertController *progress = [UIAlertController alertControllerWithTitle:@"Backup"
+                                                                          message:@"Importing archive..."
+                                                                   preferredStyle:UIAlertControllerStyleAlert];
+        [self presentViewController:progress animated:YES completion:nil];
 
-        if (imported) {
-            [self presentBackupInfoMessage:@"Backup archive imported successfully."];
-        } else {
-            [self presentBackupErrorMessage:(importError.localizedDescription ?: @"Could not import backup archive.")];
-        }
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (strongSelf == nil) {
+                if (hasScope) {
+                    [selectedURL stopAccessingSecurityScopedResource];
+                }
+                return;
+            }
+
+            NSError *importError = nil;
+            BOOL imported = [strongSelf importBackupArchiveFromURL:selectedURL error:&importError];
+            if (hasScope) {
+                [selectedURL stopAccessingSecurityScopedResource];
+            }
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (innerSelf == nil) {
+                    return;
+                }
+
+                innerSelf.backupOperationInProgress = NO;
+                [progress dismissViewControllerAnimated:YES completion:^{
+                    if (imported) {
+                        [innerSelf presentBackupInfoMessage:@"Backup archive imported successfully."];
+                    } else {
+                        [innerSelf presentBackupErrorMessage:(importError.localizedDescription ?: @"Could not import backup archive.")];
+                    }
+                }];
+            });
+        });
     } else {
         [self presentBackupInfoMessage:@"Backup archive exported."];
     }
@@ -3568,6 +3629,56 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         [NSFileManager.defaultManager removeItemAtURL:self.pendingBackupExportURL error:nil];
         self.pendingBackupExportURL = nil;
     }
+}
+
+- (nullable NSURL *)backupTemporaryDirectoryWithPrefix:(NSString *)prefix error:(NSError **)error {
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    NSURL *documentsURL = [fileManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+    if (documentsURL == nil) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:110 description:@"Could not access the documents directory."];
+        }
+        return nil;
+    }
+
+    NSString *safePrefix = prefix.length > 0 ? prefix : @"backup-temp";
+    NSString *directoryName = [NSString stringWithFormat:@".%@-%@", safePrefix, NSUUID.UUID.UUIDString.lowercaseString];
+    NSURL *directoryURL = [documentsURL URLByAppendingPathComponent:directoryName isDirectory:YES];
+    NSError *directoryError = nil;
+    [fileManager createDirectoryAtURL:directoryURL
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&directoryError];
+    if (directoryError != nil) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:111 description:(directoryError.localizedDescription ?: @"Could not create a temporary backup directory.")];
+        }
+        return nil;
+    }
+    return directoryURL;
+}
+
+- (void)cleanupBackupTemporaryDirectoryAtURL:(NSURL *)directoryURL {
+    if (directoryURL == nil) {
+        return;
+    }
+    [NSFileManager.defaultManager removeItemAtURL:directoryURL error:nil];
+}
+
+- (BOOL)restoreMusicDirectoryAtURL:(NSURL *)musicDirectoryURL
+                   fromBackupURL:(NSURL *)backupDirectoryURL {
+    if (musicDirectoryURL == nil || backupDirectoryURL == nil) {
+        return NO;
+    }
+
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    if ([fileManager fileExistsAtPath:musicDirectoryURL.path]) {
+        [fileManager removeItemAtURL:musicDirectoryURL error:nil];
+    }
+    if (![fileManager fileExistsAtPath:backupDirectoryURL.path]) {
+        return NO;
+    }
+    return [fileManager moveItemAtURL:backupDirectoryURL toURL:musicDirectoryURL error:nil];
 }
 
 - (void)presentBackupInfoMessage:(NSString *)message {
@@ -4020,23 +4131,30 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     SonoraLibraryManager *library = SonoraLibraryManager.sharedManager;
     SonoraPlaylistStore *playlistStore = SonoraPlaylistStore.sharedStore;
     SonoraFavoritesStore *favoritesStore = SonoraFavoritesStore.sharedStore;
-
-    NSArray<SonoraTrack *> *currentTracks = [library reloadTracks];
-    for (SonoraTrack *track in [currentTracks copy]) {
-        [library deleteTrackWithIdentifier:track.identifier error:nil];
-    }
-    for (SonoraPlaylist *playlist in [playlistStore.playlists copy]) {
-        [playlistStore deletePlaylistWithID:playlist.playlistID];
-    }
-    for (NSString *favoriteID in [favoritesStore.favoriteTrackIDs copy]) {
-        [favoritesStore setTrackID:favoriteID favorite:NO];
-    }
-
+    NSFileManager *fileManager = NSFileManager.defaultManager;
     NSURL *musicDirectoryURL = [library musicDirectoryURL];
-    [NSFileManager.defaultManager createDirectoryAtURL:musicDirectoryURL
-                           withIntermediateDirectories:YES
-                                            attributes:nil
-                                                 error:nil];
+    NSError *stagingError = nil;
+    NSURL *stagingDirectoryURL = [self backupTemporaryDirectoryWithPrefix:@"sonora-import-staging" error:&stagingError];
+    if (stagingDirectoryURL == nil) {
+        if (error != NULL) {
+            *error = stagingError;
+        }
+        return NO;
+    }
+    NSURL *previousMusicBackupURL = [stagingDirectoryURL URLByAppendingPathComponent:@"previous-music" isDirectory:YES];
+    NSURL *preparedMusicDirectoryURL = [stagingDirectoryURL URLByAppendingPathComponent:@"prepared-music" isDirectory:YES];
+    NSError *preparedDirectoryError = nil;
+    [fileManager createDirectoryAtURL:preparedMusicDirectoryURL
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&preparedDirectoryError];
+    if (preparedDirectoryError != nil) {
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:303 description:(preparedDirectoryError.localizedDescription ?: @"Could not prepare imported music files.")];
+        }
+        [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
+        return NO;
+    }
 
     NSMutableDictionary<NSString *, NSString *> *backupFileNameByTrackID = [NSMutableDictionary dictionary];
     NSMutableOrderedSet<NSString *> *favoriteBackupIDs = [NSMutableOrderedSet orderedSet];
@@ -4052,20 +4170,25 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         }
         NSData *songData = entries[songEntry];
         if (songData.length == 0) {
-            continue;
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:304 description:@"Backup archive is missing an audio file payload."];
+            }
+            [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
+            return NO;
         }
         NSString *preferredFileName = songEntry.lastPathComponent;
         if (preferredFileName.length == 0) {
             preferredFileName = [NSString stringWithFormat:@"%@.bin", [self safeTokenFromString:backupID fallback:@"track"]];
         }
-        NSString *uniqueFileName = [self uniqueFileNameInDirectoryURL:musicDirectoryURL preferredName:preferredFileName];
-        NSURL *targetURL = [musicDirectoryURL URLByAppendingPathComponent:uniqueFileName];
+        NSString *uniqueFileName = [self uniqueFileNameInDirectoryURL:preparedMusicDirectoryURL preferredName:preferredFileName];
+        NSURL *targetURL = [preparedMusicDirectoryURL URLByAppendingPathComponent:uniqueFileName];
         NSError *writeError = nil;
         [songData writeToURL:targetURL options:NSDataWritingAtomic error:&writeError];
         if (writeError != nil) {
             if (error != NULL) {
-                *error = [self backupErrorWithCode:303 description:(writeError.localizedDescription ?: @"Could not restore audio file from archive.")];
+                *error = [self backupErrorWithCode:305 description:(writeError.localizedDescription ?: @"Could not stage audio file from backup archive.")];
             }
+            [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
             return NO;
         }
         backupFileNameByTrackID[backupID] = uniqueFileName;
@@ -4080,6 +4203,32 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         if ([value isKindOfClass:NSString.class] && ((NSString *)value).length > 0) {
             [favoriteBackupIDs addObject:(NSString *)value];
         }
+    }
+
+    BOOL hadExistingMusicDirectory = [fileManager fileExistsAtPath:musicDirectoryURL.path];
+    if (hadExistingMusicDirectory) {
+        NSError *backupMoveError = nil;
+        [fileManager moveItemAtURL:musicDirectoryURL toURL:previousMusicBackupURL error:&backupMoveError];
+        if (backupMoveError != nil) {
+            if (error != NULL) {
+                *error = [self backupErrorWithCode:306 description:(backupMoveError.localizedDescription ?: @"Could not prepare the current library for import.")];
+            }
+            [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
+            return NO;
+        }
+    }
+
+    NSError *activateImportError = nil;
+    [fileManager moveItemAtURL:preparedMusicDirectoryURL toURL:musicDirectoryURL error:&activateImportError];
+    if (activateImportError != nil) {
+        if (hadExistingMusicDirectory) {
+            [self restoreMusicDirectoryAtURL:musicDirectoryURL fromBackupURL:previousMusicBackupURL];
+        }
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:307 description:(activateImportError.localizedDescription ?: @"Could not activate imported music files.")];
+        }
+        [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
+        return NO;
     }
 
     NSArray<SonoraTrack *> *restoredTracks = [library reloadTracks];
@@ -4098,6 +4247,25 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
             localTrackIDByBackupID[backupID] = localTrackID;
         }
     }];
+
+    if (backupFileNameByTrackID.count > 0 && localTrackIDByBackupID.count < backupFileNameByTrackID.count) {
+        if (hadExistingMusicDirectory) {
+            [self restoreMusicDirectoryAtURL:musicDirectoryURL fromBackupURL:previousMusicBackupURL];
+        }
+        [library reloadTracks];
+        if (error != NULL) {
+            *error = [self backupErrorWithCode:308 description:@"Imported music files could not be indexed after restore."];
+        }
+        [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
+        return NO;
+    }
+
+    for (SonoraPlaylist *playlist in [playlistStore.playlists copy]) {
+        [playlistStore deletePlaylistWithID:playlist.playlistID];
+    }
+    for (NSString *favoriteID in [favoritesStore.favoriteTrackIDs copy]) {
+        [favoritesStore setTrackID:favoriteID favorite:NO];
+    }
 
     for (NSString *backupFavoriteID in favoriteBackupIDs) {
         NSString *localTrackID = localTrackIDByBackupID[backupFavoriteID];
@@ -4216,6 +4384,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [self notifyPlayerSettingsChanged];
     [NSNotificationCenter.defaultCenter postNotificationName:SonoraPlaylistsDidChangeNotification object:nil];
     [NSNotificationCenter.defaultCenter postNotificationName:SonoraFavoritesDidChangeNotification object:nil];
+    [self cleanupBackupTemporaryDirectoryAtURL:stagingDirectoryURL];
     return YES;
 }
 
