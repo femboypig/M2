@@ -28,6 +28,8 @@ Carthage/Build/
 # Editors
 .idea/
 .vscode/
+__pycache__/
+*.pyc
 
 #garbge
 .derivedDataLocal/
