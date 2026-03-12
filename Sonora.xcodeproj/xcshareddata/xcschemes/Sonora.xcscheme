@@ -6,24 +6,6 @@
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES"
       buildArchitectures = "Automatic">
-      <PreActions>
-         <ExecutionAction
-            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
-            <ActionContent
-               title = "Auto Bump iOS Version"
-               scriptText = "if [ &quot;$ACTION&quot; = &quot;indexbuild&quot; ]; then&#10;  exit 0&#10;fi&#10;python3 &quot;$SRCROOT/tools/bump_ios_version.py&quot; --project &quot;$SRCROOT/Sonora.xcodeproj/project.pbxproj&quot;&#10;">
-               <EnvironmentBuildable>
-                  <BuildableReference
-                     BuildableIdentifier = "primary"
-                     BlueprintIdentifier = "91322FB52F4A7F8C002ADCB9"
-                     BuildableName = "Sonora.app"
-                     BlueprintName = "Sonora"
-                     ReferencedContainer = "container:Sonora.xcodeproj">
-                  </BuildableReference>
-               </EnvironmentBuildable>
-            </ActionContent>
-         </ExecutionAction>
-      </PreActions>
       <BuildActionEntries>
          <BuildActionEntry
             buildForTesting = "YES"
