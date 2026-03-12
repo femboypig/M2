@@ -9,4 +9,10 @@ An offline iOS music player.
 
 ## Run
 
-Open `Sonora.xcodeproj` in Xcode and run the `M2` scheme.
+Open `Sonora.xcodeproj` in Xcode and run the `Sonora` scheme.
+
+## Targets
+
+- `Sonora`: main iOS app
+- `SonoraLovelyWidget`: widget extension
+- `SonoraTests`: unit test target
