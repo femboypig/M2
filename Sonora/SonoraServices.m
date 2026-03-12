@@ -43,6 +43,14 @@ static NSString * const kPlaybackSessionCurrentTrackIDKey = @"sonora.playbackSes
 static NSString * const kPlaybackSessionCurrentTimeKey = @"sonora.playbackSession.currentTime";
 static NSString * const kPlaybackSessionWasPlayingKey = @"sonora.playbackSession.wasPlaying";
 static NSString * const kMiniStreamingPlaceholderPrefix = @"mini-streaming-placeholder-";
+
+static NSString *SonoraServicesTrimmedStringValue(id value) {
+    if (![value isKindOfClass:NSString.class]) {
+        return @"";
+    }
+    NSString *trimmed = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return trimmed ?: @"";
+}
 static NSString * const kDiagnosticsDirectoryName = @"SonoraDiagnostics";
 static NSString * const kDiagnosticsLogFileName = @"runtime.log";
 static NSString * const kDiagnosticsLogFileBackupName = @"runtime-prev.log";
@@ -1232,12 +1240,12 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
         return nil;
     }
 
-    NSString *resolvedTitle = SonoraTrimmedStringValue(preferredTitle);
+    NSString *resolvedTitle = SonoraServicesTrimmedStringValue(preferredTitle);
     if (resolvedTitle.length > 0) {
         track.title = resolvedTitle;
     }
 
-    NSString *resolvedArtist = SonoraTrimmedStringValue(preferredArtist);
+    NSString *resolvedArtist = SonoraServicesTrimmedStringValue(preferredArtist);
     if (resolvedArtist.length > 0) {
         track.artist = resolvedArtist;
     }
