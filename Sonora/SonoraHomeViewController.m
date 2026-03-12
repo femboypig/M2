@@ -863,7 +863,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     return path;
 }
 
-- (void)restartAnimations {
+- (void)restartLineAnimations {
     if (CGRectIsEmpty(self.bounds)) {
         return;
     }
@@ -959,7 +959,9 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
             [line addAnimation:shadowAnim forKey:@"sonora_wave_line_shadow"];
         }
     }];
+}
 
+- (void)restartGlowAnimations {
     [self.haloLayer removeAnimationForKey:@"sonora_wave_halo_scale"];
     [self.haloLayer removeAnimationForKey:@"sonora_wave_halo_opacity"];
     [self.coreGlowLayer removeAnimationForKey:@"sonora_wave_core_scale"];
@@ -1000,7 +1002,11 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     coreOpacity.repeatCount = HUGE_VALF;
     coreOpacity.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [self.coreGlowLayer addAnimation:coreOpacity forKey:@"sonora_wave_core_opacity"];
+}
 
+- (void)restartAnimations {
+    [self restartLineAnimations];
+    [self restartGlowAnimations];
 }
 
 - (void)transitionToUpdatedGeometry {
@@ -1075,7 +1081,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
         if (self.geometryTransitionGeneration != generation) {
             return;
         }
-        [self restartAnimations];
+        [self restartLineAnimations];
     });
 }
 
@@ -3620,7 +3626,11 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         return;
     }
 
-    [collectionView reloadData];
+    if (self.recommendationTracks.count > 0) {
+        [self refreshVisibleWaveCellIfNeeded];
+    } else {
+        [collectionView reloadData];
+    }
 }
 
 - (void)handlePlayerSettingsChanged {
@@ -3843,9 +3853,14 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     }
 
     NSUInteger reloadGeneration = ++self.reloadGeneration;
+    NSArray<SonoraTrack *> *existingRecommendationTracks = self.recommendationTracks ?: @[];
     NSArray<SonoraTrack *> *existingNeedThisTracks = self.needThisTracks ?: @[];
     NSArray<SonoraTrack *> *existingFreshTracks = self.freshTracks ?: @[];
     NSString *existingSessionSignature = self.homeRecommendationsSessionSignature ?: @"";
+    NSString *existingRecommendationSignature = [self recommendationsSessionSignatureForTracks:existingRecommendationTracks];
+    NSString *existingNeedThisSignature = [self recommendationsSessionSignatureForTracks:existingNeedThisTracks];
+    NSString *existingFreshSignature = [self recommendationsSessionSignatureForTracks:existingFreshTracks];
+    BOOL hadTracks = self.allTracks.count > 0;
 
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -3873,6 +3888,14 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
             needThisTracks = [strongSelf buildRecommendationsFromTracks:allTracks limit:12];
             freshTracks = [strongSelf buildFreshChoiceTracksFromTracks:allTracks limit:12];
         }
+        NSString *recommendationSignature = [strongSelf recommendationsSessionSignatureForTracks:recommendationTracks];
+        NSString *needThisSignature = [strongSelf recommendationsSessionSignatureForTracks:needThisTracks];
+        NSString *freshSignature = [strongSelf recommendationsSessionSignatureForTracks:freshTracks];
+        BOOL contentUnchanged =
+        (hadTracks == (allTracks.count > 0)) &&
+        [existingRecommendationSignature isEqualToString:recommendationSignature] &&
+        [existingNeedThisSignature isEqualToString:needThisSignature] &&
+        [existingFreshSignature isEqualToString:freshSignature];
 
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) innerSelf = weakSelf;
@@ -3885,6 +3908,12 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
             innerSelf.needThisTracks = needThisTracks;
             innerSelf.freshTracks = freshTracks;
             innerSelf.homeRecommendationsSessionSignature = sessionSignature;
+
+            if (contentUnchanged) {
+                [innerSelf refreshVisibleWaveCellIfNeeded];
+                [innerSelf updateEmptyStateIfNeeded];
+                return;
+            }
 
             [innerSelf.collectionView reloadData];
             [innerSelf updateEmptyStateIfNeeded];
@@ -4319,6 +4348,49 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     return ratio >= 0.68;
 }
 
+- (void)configureHeroRecommendationCell:(SonoraHomeHeroRecommendationCell *)cell {
+    if (cell == nil || self.recommendationTracks.count == 0) {
+        return;
+    }
+
+    NSArray<SonoraTrack *> *queue = SonoraPlaybackManager.sharedManager.currentQueue;
+    SonoraTrack *currentTrack = SonoraPlaybackManager.sharedManager.currentTrack;
+    BOOL isWaveQueue = [self isWaveQueueActiveForQueue:queue currentTrack:currentTrack];
+    SonoraTrack *displayTrack = (isWaveQueue && currentTrack != nil) ? currentTrack : self.recommendationTracks.firstObject;
+    [cell configureWithTrack:displayTrack];
+    cell.playing = isWaveQueue && SonoraPlaybackManager.sharedManager.isPlaying;
+
+    __weak typeof(self) weakSelf = self;
+    cell.playHandler = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf == nil || strongSelf.recommendationTracks.count == 0) {
+            return;
+        }
+        NSArray<SonoraTrack *> *liveQueue = SonoraPlaybackManager.sharedManager.currentQueue;
+        SonoraTrack *liveTrack = SonoraPlaybackManager.sharedManager.currentTrack;
+        BOOL liveWaveQueue = [strongSelf isWaveQueueActiveForQueue:liveQueue currentTrack:liveTrack];
+        if (liveWaveQueue && SonoraPlaybackManager.sharedManager.currentTrack != nil) {
+            [SonoraPlaybackManager.sharedManager togglePlayPause];
+        } else {
+            [strongSelf playTracks:strongSelf.recommendationTracks startIndex:0];
+        }
+    };
+}
+
+- (void)refreshVisibleWaveCellIfNeeded {
+    if (self.collectionView == nil || self.recommendationTracks.count == 0) {
+        return;
+    }
+
+    NSIndexPath *indexPath = [NSIndexPath indexPathForItem:0 inSection:SonoraHomeSectionTypeForYou];
+    SonoraHomeHeroRecommendationCell *cell = (SonoraHomeHeroRecommendationCell *)[self.collectionView cellForItemAtIndexPath:indexPath];
+    if (![cell isKindOfClass:SonoraHomeHeroRecommendationCell.class]) {
+        return;
+    }
+
+    [self configureHeroRecommendationCell:cell];
+}
+
 - (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView
                             cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     switch ((SonoraHomeSectionType)indexPath.section) {
@@ -4326,27 +4398,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
             SonoraHomeHeroRecommendationCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:SonoraHomeHeroRecommendationCellReuseID
                                                                                              forIndexPath:indexPath];
             if (self.recommendationTracks.count > 0) {
-                NSArray<SonoraTrack *> *queue = SonoraPlaybackManager.sharedManager.currentQueue;
-                SonoraTrack *currentTrack = SonoraPlaybackManager.sharedManager.currentTrack;
-                BOOL isWaveQueue = [self isWaveQueueActiveForQueue:queue currentTrack:currentTrack];
-                SonoraTrack *displayTrack = (isWaveQueue && currentTrack != nil) ? currentTrack : self.recommendationTracks.firstObject;
-                [cell configureWithTrack:displayTrack];
-                cell.playing = isWaveQueue && SonoraPlaybackManager.sharedManager.isPlaying;
-                __weak typeof(self) weakSelf = self;
-                cell.playHandler = ^{
-                    __strong typeof(weakSelf) strongSelf = weakSelf;
-                    if (strongSelf == nil || strongSelf.recommendationTracks.count == 0) {
-                        return;
-                    }
-                    NSArray<SonoraTrack *> *liveQueue = SonoraPlaybackManager.sharedManager.currentQueue;
-                    SonoraTrack *liveTrack = SonoraPlaybackManager.sharedManager.currentTrack;
-                    BOOL liveWaveQueue = [strongSelf isWaveQueueActiveForQueue:liveQueue currentTrack:liveTrack];
-                    if (liveWaveQueue && SonoraPlaybackManager.sharedManager.currentTrack != nil) {
-                        [SonoraPlaybackManager.sharedManager togglePlayPause];
-                    } else {
-                        [strongSelf playTracks:strongSelf.recommendationTracks startIndex:0];
-                    }
-                };
+                [self configureHeroRecommendationCell:cell];
             }
             return cell;
         }
