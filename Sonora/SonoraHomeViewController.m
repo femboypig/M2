@@ -12,8 +12,10 @@
 
 #import "SonoraCells.h"
 #import "SonoraHistoryViewController.h"
+#import "SonoraSettings.h"
 #import "SonoraSettingsBackupArchiveService.h"
 #import "SonoraSharedPlaylists.h"
+#import "SonoraSleepTimerUI.h"
 #import "SonoraServices.h"
 
 static NSString * const SonoraHomeRecommendationCellReuseID = @"SonoraHomeRecommendationCell";
@@ -68,10 +70,6 @@ static UIView *SonoraHomeNavigationTitleView(NSString *text) {
     return titleLabel;
 }
 
-static NSString * const SonoraSettingsAccentHexKey = @"sonora.settings.accentHex";
-static NSString * const SonoraSettingsLegacyAccentColorKey = @"sonora.settings.accentColor";
-static NSString * const SonoraSettingsMyWaveLookKey = @"sonora.settings.myWaveLook";
-
 static UIColor *SonoraHomeDefaultAccentColor(void) {
     return [UIColor colorWithRed:1.0 green:0.83 blue:0.08 alpha:1.0];
 }
@@ -114,12 +112,11 @@ static UIColor *SonoraHomeColorFromHexString(NSString *hexString) {
 }
 
 static UIColor *SonoraHomeAccentYellowColor(void) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    UIColor *fromHex = SonoraHomeColorFromHexString([defaults stringForKey:SonoraSettingsAccentHexKey]);
+    UIColor *fromHex = SonoraHomeColorFromHexString(SonoraSettingsAccentHex());
     if (fromHex != nil) {
         return fromHex;
     }
-    return SonoraHomeLegacyAccentColorForIndex([defaults integerForKey:SonoraSettingsLegacyAccentColorKey]);
+    return SonoraHomeLegacyAccentColorForIndex(SonoraSettingsLegacyAccentColorIndex());
 }
 
 static NSDate *SonoraTrackModifiedDate(SonoraTrack *track) {
@@ -167,26 +164,6 @@ static UIColor *SonoraBlendColor(UIColor *from, UIColor *to, CGFloat ratio) {
                            green:(fg + ((tg - fg) * ratio))
                             blue:(fb + ((tb - fb) * ratio))
                            alpha:(fa + ((ta - fa) * ratio))];
-}
-
-static NSString *SonoraHomeStableHashString(NSString *value) {
-    if (value.length == 0) {
-        return @"0";
-    }
-
-    NSData *data = [value dataUsingEncoding:NSUTF8StringEncoding];
-    if (data.length == 0) {
-        return @"0";
-    }
-
-    const uint8_t *bytes = data.bytes;
-    uint64_t hash = 1469598103934665603ULL;
-    for (NSUInteger index = 0; index < data.length; index += 1) {
-        hash ^= bytes[index];
-        hash *= 1099511628211ULL;
-    }
-
-    return [NSString stringWithFormat:@"%016llx", hash];
 }
 
 static NSArray<UIColor *> *SonoraWavePaletteFromImage(UIImage *image) {
@@ -356,77 +333,6 @@ static double SonoraHomeBestTrackWeight(NSDictionary<NSString *, NSNumber *> *me
     return MAX(0.05, 0.24 + (stabilized * 3.0) + playBoost - skipPenalty + momentum + favoriteBoost);
 }
 
-static NSString *SonoraHomeSleepTimerRemainingString(NSTimeInterval interval) {
-    NSInteger totalSeconds = (NSInteger)llround(MAX(0.0, interval));
-    NSInteger hours = totalSeconds / 3600;
-    NSInteger minutes = (totalSeconds % 3600) / 60;
-    NSInteger seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-        return [NSString stringWithFormat:@"%ld:%02ld:%02ld", (long)hours, (long)minutes, (long)seconds];
-    }
-    return [NSString stringWithFormat:@"%ld:%02ld", (long)minutes, (long)seconds];
-}
-
-static NSTimeInterval SonoraHomeSleepTimerDurationFromInput(NSString *input) {
-    NSString *trimmed = [input stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if (trimmed.length == 0) {
-        return 0.0;
-    }
-
-    NSArray<NSString *> *parts = [trimmed componentsSeparatedByString:@":"];
-    if (parts.count == 2 || parts.count == 3) {
-        NSMutableArray<NSNumber *> *values = [NSMutableArray arrayWithCapacity:parts.count];
-        for (NSString *part in parts) {
-            NSString *token = [part stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (token.length == 0) {
-                return 0.0;
-            }
-            NSScanner *scanner = [NSScanner scannerWithString:token];
-            NSInteger value = 0;
-            if (![scanner scanInteger:&value] || !scanner.isAtEnd || value < 0) {
-                return 0.0;
-            }
-            [values addObject:@(value)];
-        }
-
-        NSTimeInterval duration = 0.0;
-        if (values.count == 2) {
-            NSInteger hours = values[0].integerValue;
-            NSInteger minutes = values[1].integerValue;
-            if (minutes >= 60) {
-                return 0.0;
-            }
-            duration = (NSTimeInterval)(hours * 3600 + minutes * 60);
-        } else {
-            NSInteger hours = values[0].integerValue;
-            NSInteger minutes = values[1].integerValue;
-            NSInteger seconds = values[2].integerValue;
-            if (minutes >= 60 || seconds >= 60) {
-                return 0.0;
-            }
-            duration = (NSTimeInterval)(hours * 3600 + minutes * 60 + seconds);
-        }
-
-        if (duration <= 0.0 || duration > 24.0 * 3600.0) {
-            return 0.0;
-        }
-        return duration;
-    }
-
-    NSScanner *scanner = [NSScanner scannerWithString:trimmed];
-    double minutesValue = 0.0;
-    if (![scanner scanDouble:&minutesValue] || !scanner.isAtEnd) {
-        return 0.0;
-    }
-
-    NSTimeInterval duration = minutesValue * 60.0;
-    if (!isfinite(duration) || duration <= 0.0 || duration > 24.0 * 3600.0) {
-        return 0.0;
-    }
-    return duration;
-}
-
 static void SonoraShuffleMutableArray(NSMutableArray *array) {
     if (array.count <= 1) {
         return;
@@ -438,12 +344,11 @@ static void SonoraShuffleMutableArray(NSMutableArray *array) {
     }
 }
 
+@interface SonoraPlayerViewController : UIViewController
+@end
+
 static UIViewController * _Nullable SonoraInstantiatePlayerViewController(void) {
-    Class playerClass = NSClassFromString(@"SonoraPlayerViewController");
-    if (playerClass == Nil || ![playerClass isSubclassOfClass:UIViewController.class]) {
-        return nil;
-    }
-    return [[playerClass alloc] init];
+    return [[SonoraPlayerViewController alloc] init];
 }
 
 @interface SonoraHomeAlbumItem : NSObject
@@ -553,13 +458,10 @@ typedef NS_ENUM(NSInteger, SonoraMyWaveLook) {
 };
 
 static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSInteger storedValue = [defaults objectForKey:SonoraSettingsMyWaveLookKey]
-    ? [defaults integerForKey:SonoraSettingsMyWaveLookKey]
-    : SonoraMyWaveLookContours;
+    NSInteger storedValue = SonoraSettingsMyWaveLook();
     if (storedValue != SonoraMyWaveLookClouds && storedValue != SonoraMyWaveLookContours) {
         storedValue = SonoraMyWaveLookContours;
-        [defaults setInteger:storedValue forKey:SonoraSettingsMyWaveLookKey];
+        SonoraSettingsSetMyWaveLook(storedValue);
     }
     return (SonoraMyWaveLook)storedValue;
 }
@@ -2241,98 +2143,21 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     self.sleepControlButton.tintColor = isActive ? SonoraHomeAccentYellowColor() : UIColor.labelColor;
     self.sleepControlButton.accessibilityLabel = isActive
     ? [NSString stringWithFormat:@"Sleep timer active, %@ remaining",
-       SonoraHomeSleepTimerRemainingString(SonoraSleepTimerManager.sharedManager.remainingTime)]
+       SonoraSleepTimerRemainingString(SonoraSleepTimerManager.sharedManager.remainingTime)]
     : @"Sleep timer";
 }
 
 - (void)presentCustomSleepTimerAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Custom Sleep Timer"
-                                                                   message:@"Enter minutes (e.g. 25) or h:mm (e.g. 1:30)."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"25 or 1:30";
-        textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
-        NSTimeInterval remaining = SonoraSleepTimerManager.sharedManager.remainingTime;
-        if (remaining > 0.0) {
-            textField.text = [NSString stringWithFormat:@"%.0f", ceil(remaining / 60.0)];
-        }
-    }];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Set Timer"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction * _Nonnull action) {
-        NSString *rawValue = alert.textFields.firstObject.text ?: @"";
-        NSTimeInterval duration = SonoraHomeSleepTimerDurationFromInput(rawValue);
-        if (duration <= 0.0) {
-            UIAlertController *invalid = [UIAlertController alertControllerWithTitle:@"Invalid Time"
-                                                                              message:@"Use minutes (25) or h:mm (1:30). Max is 24 hours."
-                                                                       preferredStyle:UIAlertControllerStyleAlert];
-            [invalid addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-            [self presentViewController:invalid animated:YES completion:nil];
-            return;
-        }
-
-        [SonoraSleepTimerManager.sharedManager startWithDuration:duration];
+    SonoraPresentCustomSleepTimerAlert(self, ^{
         [self updateSleepTimerButton];
-    }]];
-
-    [self presentViewController:alert animated:YES completion:nil];
+    });
 }
 
 - (void)sleepTimerTapped {
-    SonoraSleepTimerManager *sleepTimer = SonoraSleepTimerManager.sharedManager;
-    NSString *message = sleepTimer.isActive
-    ? [NSString stringWithFormat:@"Will stop playback in %@.", SonoraHomeSleepTimerRemainingString(sleepTimer.remainingTime)]
-    : @"Stop playback automatically after selected time.";
-
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Sleep Timer"
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-
-    NSArray<NSNumber *> *durations = @[@(15 * 60), @(30 * 60), @(45 * 60), @(60 * 60)];
-    for (NSNumber *durationValue in durations) {
-        NSInteger minutes = durationValue.integerValue / 60;
-        NSString *title = [NSString stringWithFormat:@"%ld min", (long)minutes];
-        [sheet addAction:[UIAlertAction actionWithTitle:title
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction * _Nonnull action) {
-            [SonoraSleepTimerManager.sharedManager startWithDuration:durationValue.doubleValue];
-            [self updateSleepTimerButton];
-        }]];
-    }
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Custom..."
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction * _Nonnull action) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self presentCustomSleepTimerAlert];
-        });
-    }]];
-
-    if (sleepTimer.isActive) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Turn Off Sleep Timer"
-                                                  style:UIAlertActionStyleDestructive
-                                                handler:^(__unused UIAlertAction * _Nonnull action) {
-            [SonoraSleepTimerManager.sharedManager cancel];
-            [self updateSleepTimerButton];
-        }]];
-    }
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-
-    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
-    if (popover != nil) {
-        UIView *anchor = self.sleepControlButton ?: self.playButton;
-        popover.sourceView = anchor;
-        popover.sourceRect = anchor.bounds;
-    }
-
-    [self presentViewController:sheet animated:YES completion:nil];
+    UIView *anchor = self.sleepControlButton ?: self.playButton;
+    SonoraPresentSleepTimerActionSheet(self, anchor, ^{
+        [self updateSleepTimerButton];
+    });
 }
 
 - (void)handleSleepTimerChanged {
@@ -2444,14 +2269,6 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
 
 @end
 
-static NSString * const SonoraSettingsFontKey = @"sonora.settings.font";
-static NSString * const SonoraSettingsArtworkStyleKey = @"sonora.settings.artworkStyle";
-static NSString * const SonoraSettingsArtworkEqualizerKey = @"sonora.settings.showArtworkEqualizer";
-static NSString * const SonoraSettingsTrackGapKey = @"sonora.settings.trackGapSeconds";
-static NSString * const SonoraSettingsMaxStorageMBKey = @"sonora.settings.maxStorageMB";
-static NSString * const SonoraSettingsCacheOnlinePlaylistTracksKey = @"sonora.settings.cacheOnlinePlaylistTracks";
-static NSString * const SonoraSettingsOnlinePlaylistCacheMaxMBKey = @"sonora.settings.onlinePlaylistCacheMaxMB";
-static NSString * const SonoraSettingsPreservePlayerModesKey = @"sonora.settings.preservePlayerModes";
 static NSString * const SonoraSettingsGitHubURLString = @"https://github.com/femboypig/Sonora";
 static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 
@@ -2902,24 +2719,23 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)loadSettingsValues {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSInteger font = [defaults objectForKey:SonoraSettingsFontKey] ? [defaults integerForKey:SonoraSettingsFontKey] : 0;
-    NSInteger artworkStyle = [defaults objectForKey:SonoraSettingsArtworkStyleKey] ? [defaults integerForKey:SonoraSettingsArtworkStyleKey] : 1;
-    NSInteger myWaveLook = [defaults objectForKey:SonoraSettingsMyWaveLookKey] ? [defaults integerForKey:SonoraSettingsMyWaveLookKey] : SonoraMyWaveLookContours;
-    BOOL artworkEqualizerEnabled = [defaults objectForKey:SonoraSettingsArtworkEqualizerKey] ? [defaults boolForKey:SonoraSettingsArtworkEqualizerKey] : YES;
-    BOOL preserveModes = [defaults objectForKey:SonoraSettingsPreservePlayerModesKey] ? [defaults boolForKey:SonoraSettingsPreservePlayerModesKey] : YES;
-    double trackGap = [defaults objectForKey:SonoraSettingsTrackGapKey] ? [defaults doubleForKey:SonoraSettingsTrackGapKey] : 0.0;
-    NSInteger maxStorageMB = [defaults objectForKey:SonoraSettingsMaxStorageMBKey] ? [defaults integerForKey:SonoraSettingsMaxStorageMBKey] : -1;
-    BOOL cacheOnlinePlaylistTracks = [defaults objectForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] ? [defaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] : NO;
-    NSInteger onlinePlaylistCacheMaxMB = [defaults objectForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] ? [defaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] : 1024;
+    NSInteger font = SonoraSettingsFontStyleIndex();
+    NSInteger artworkStyle = SonoraSettingsArtworkStyleIndex();
+    NSInteger myWaveLook = SonoraSettingsMyWaveLook();
+    BOOL artworkEqualizerEnabled = SonoraSettingsArtworkEqualizerEnabled();
+    BOOL preserveModes = SonoraSettingsPreservePlayerModesEnabled();
+    double trackGap = SonoraSettingsTrackGapSeconds();
+    NSInteger maxStorageMB = SonoraSettingsMaxStorageMB();
+    BOOL cacheOnlinePlaylistTracks = SonoraSettingsCacheOnlinePlaylistTracksEnabled();
+    NSInteger onlinePlaylistCacheMaxMB = SonoraSettingsOnlinePlaylistCacheMaxMB();
 
     if (font > 1) {
         font = 0;
-        [defaults setInteger:font forKey:SonoraSettingsFontKey];
+        SonoraSettingsSetFontStyleIndex(font);
     }
     if (myWaveLook != SonoraMyWaveLookClouds && myWaveLook != SonoraMyWaveLookContours) {
         myWaveLook = SonoraMyWaveLookContours;
-        [defaults setInteger:myWaveLook forKey:SonoraSettingsMyWaveLookKey];
+        SonoraSettingsSetMyWaveLook(myWaveLook);
     }
     self.fontControl.selectedSegmentIndex = MAX(0, MIN(1, font));
     self.artworkStyleControl.selectedSegmentIndex = MAX(0, MIN(1, artworkStyle));
@@ -2931,9 +2747,9 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     double snappedGap = [self nearestTrackGapValueForValue:trackGap];
     NSInteger snappedMaxStorage = [self nearestMaxStorageValueForValue:maxStorageMB];
     NSInteger snappedOnlinePlaylistCache = [self nearestMaxStorageValueForValue:onlinePlaylistCacheMaxMB];
-    [defaults setDouble:snappedGap forKey:SonoraSettingsTrackGapKey];
-    [defaults setInteger:snappedMaxStorage forKey:SonoraSettingsMaxStorageMBKey];
-    [defaults setInteger:snappedOnlinePlaylistCache forKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
+    SonoraSettingsSetTrackGapSeconds(snappedGap);
+    SonoraSettingsSetMaxStorageMB(snappedMaxStorage);
+    SonoraSettingsSetOnlinePlaylistCacheMaxMB(snappedOnlinePlaylistCache);
     [self refreshTrackGapLabel];
     [self refreshMaxStorageLabel];
     [self refreshOnlinePlaylistCacheUsageLabel];
@@ -2942,27 +2758,27 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)fontChanged:(UISegmentedControl *)sender {
-    [NSUserDefaults.standardUserDefaults setInteger:sender.selectedSegmentIndex forKey:SonoraSettingsFontKey];
+    SonoraSettingsSetFontStyleIndex(sender.selectedSegmentIndex);
     [self notifyPlayerSettingsChanged];
 }
 
 - (void)artworkStyleChanged:(UISegmentedControl *)sender {
-    [NSUserDefaults.standardUserDefaults setInteger:sender.selectedSegmentIndex forKey:SonoraSettingsArtworkStyleKey];
+    SonoraSettingsSetArtworkStyleIndex(sender.selectedSegmentIndex);
     [self notifyPlayerSettingsChanged];
 }
 
 - (void)myWaveLookChanged:(UISegmentedControl *)sender {
     NSInteger look = MAX((NSInteger)SonoraMyWaveLookClouds, MIN((NSInteger)SonoraMyWaveLookContours, sender.selectedSegmentIndex));
-    [NSUserDefaults.standardUserDefaults setInteger:look forKey:SonoraSettingsMyWaveLookKey];
+    SonoraSettingsSetMyWaveLook(look);
     [self notifyPlayerSettingsChanged];
 }
 
 - (void)preservePlayerModesChanged:(UISwitch *)sender {
-    [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:SonoraSettingsPreservePlayerModesKey];
+    SonoraSettingsSetPreservePlayerModesEnabled(sender.isOn);
 }
 
 - (void)cacheOnlinePlaylistTracksChanged:(UISwitch *)sender {
-    [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:SonoraSettingsCacheOnlinePlaylistTracksKey];
+    SonoraSettingsSetCacheOnlinePlaylistTracksEnabled(sender.isOn);
     [self trimSharedPlaylistAudioCacheToLimitBytes:(sender.isOn ? [self onlinePlaylistCacheLimitBytes] : 0)];
     [self refreshOnlinePlaylistCacheUsageLabel];
     if (sender.isOn) {
@@ -3004,9 +2820,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 
 - (void)storeAccentColor:(UIColor *)color {
     NSString *hex = [self hexStringForColor:color];
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    [defaults setObject:hex forKey:SonoraSettingsAccentHexKey];
-    [defaults removeObjectForKey:SonoraSettingsLegacyAccentColorKey];
+    SonoraSettingsStoreAccentHex(hex);
 }
 
 - (void)refreshAccentColorLabel {
@@ -3047,13 +2861,12 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)artworkEqualizerChanged:(UISwitch *)sender {
-    [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:SonoraSettingsArtworkEqualizerKey];
+    SonoraSettingsSetArtworkEqualizerEnabled(sender.isOn);
     [self notifyPlayerSettingsChanged];
 }
 
 - (void)selectTrackGapTapped {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    double current = [self nearestTrackGapValueForValue:[defaults doubleForKey:SonoraSettingsTrackGapKey]];
+    double current = [self nearestTrackGapValueForValue:SonoraSettingsTrackGapSeconds()];
 
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Delay between tracks"
                                                                    message:[NSString stringWithFormat:@"Current: %@", [self trackGapLabelForSeconds:current]]
@@ -3064,7 +2877,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         [sheet addAction:[UIAlertAction actionWithTitle:title
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction * _Nonnull action) {
-            [NSUserDefaults.standardUserDefaults setDouble:seconds forKey:SonoraSettingsTrackGapKey];
+            SonoraSettingsSetTrackGapSeconds(seconds);
             [self refreshTrackGapLabel];
             [self notifyPlayerSettingsChanged];
         }]];
@@ -3075,8 +2888,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)selectMaxStorageTapped {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSInteger current = [self nearestMaxStorageValueForValue:[defaults integerForKey:SonoraSettingsMaxStorageMBKey]];
+    NSInteger current = [self nearestMaxStorageValueForValue:SonoraSettingsMaxStorageMB()];
 
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Max player space"
                                                                    message:[NSString stringWithFormat:@"Current: %@", [self storageLabelForMB:current]]
@@ -3087,7 +2899,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         [sheet addAction:[UIAlertAction actionWithTitle:title
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction * _Nonnull action) {
-            [NSUserDefaults.standardUserDefaults setInteger:sizeMB forKey:SonoraSettingsMaxStorageMBKey];
+            SonoraSettingsSetMaxStorageMB(sizeMB);
             [self refreshMaxStorageLabel];
             [self refreshStorageUsage];
             [self presentStorageLimitExceededAlertIfNeeded];
@@ -3100,8 +2912,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)selectOnlinePlaylistCacheTapped {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSInteger current = [self nearestMaxStorageValueForValue:[defaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey]];
+    NSInteger current = [self nearestMaxStorageValueForValue:SonoraSettingsOnlinePlaylistCacheMaxMB()];
 
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Max online cache space"
                                                                    message:[NSString stringWithFormat:@"Current: %@", [self storageLabelForMB:current]]
@@ -3112,7 +2923,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         [sheet addAction:[UIAlertAction actionWithTitle:title
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction * _Nonnull action) {
-            [NSUserDefaults.standardUserDefaults setInteger:sizeMB forKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
+            SonoraSettingsSetOnlinePlaylistCacheMaxMB(sizeMB);
             [self refreshOnlinePlaylistCacheLabel];
             if (self.onlinePlaylistCacheTracksSwitch.isOn) {
                 [self trimSharedPlaylistAudioCacheToLimitBytes:[self onlinePlaylistCacheLimitBytes]];
@@ -3224,17 +3035,17 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)refreshTrackGapLabel {
-    double value = [NSUserDefaults.standardUserDefaults doubleForKey:SonoraSettingsTrackGapKey];
+    double value = SonoraSettingsTrackGapSeconds();
     self.trackGapValueLabel.text = [self trackGapLabelForSeconds:[self nearestTrackGapValueForValue:value]];
 }
 
 - (void)refreshMaxStorageLabel {
-    NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsMaxStorageMBKey];
+    NSInteger value = SonoraSettingsMaxStorageMB();
     self.maxStorageValueLabel.text = [self storageLabelForMB:[self nearestMaxStorageValueForValue:value]];
 }
 
 - (void)refreshOnlinePlaylistCacheLabel {
-    NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
+    NSInteger value = SonoraSettingsOnlinePlaylistCacheMaxMB();
     self.onlinePlaylistCacheValueLabel.text = [self storageLabelForMB:[self nearestMaxStorageValueForValue:value]];
 }
 
@@ -3316,7 +3127,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (unsigned long long)maxStorageLimitBytes {
-    NSInteger maxMB = [self nearestMaxStorageValueForValue:[NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsMaxStorageMBKey]];
+    NSInteger maxMB = [self nearestMaxStorageValueForValue:SonoraSettingsMaxStorageMB()];
     if (maxMB <= 0) {
         return ULLONG_MAX;
     }
@@ -3332,7 +3143,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (unsigned long long)onlinePlaylistCacheLimitBytes {
-    NSInteger maxMB = [self nearestMaxStorageValueForValue:[NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey]];
+    NSInteger maxMB = [self nearestMaxStorageValueForValue:SonoraSettingsOnlinePlaylistCacheMaxMB()];
     if (maxMB <= 0) {
         return ULLONG_MAX;
     }
@@ -3501,26 +3312,16 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (NSDictionary<NSString *, id> *)backupManifestSettingsSnapshot {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSInteger fontValue = [defaults objectForKey:SonoraSettingsFontKey] ? [defaults integerForKey:SonoraSettingsFontKey] : 0;
-    NSInteger artworkStyleValue = [defaults objectForKey:SonoraSettingsArtworkStyleKey] ? [defaults integerForKey:SonoraSettingsArtworkStyleKey] : 1;
-    BOOL artworkEqualizer = [defaults objectForKey:SonoraSettingsArtworkEqualizerKey] ? [defaults boolForKey:SonoraSettingsArtworkEqualizerKey] : YES;
-    BOOL preserveModes = [defaults objectForKey:SonoraSettingsPreservePlayerModesKey] ? [defaults boolForKey:SonoraSettingsPreservePlayerModesKey] : YES;
-    double trackGap = [defaults objectForKey:SonoraSettingsTrackGapKey] ? [defaults doubleForKey:SonoraSettingsTrackGapKey] : 0.0;
-    NSInteger maxStorageMb = [defaults objectForKey:SonoraSettingsMaxStorageMBKey] ? [defaults integerForKey:SonoraSettingsMaxStorageMBKey] : -1;
-    BOOL cacheOnlinePlaylistTracks = [defaults objectForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] ? [defaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey] : NO;
-    NSInteger onlinePlaylistCacheMaxMb = [defaults objectForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] ? [defaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] : 1024;
-
     return @{
-        @"fontStyle": (fontValue == 1 ? @"serif" : @"system"),
-        @"artworkStyle": (artworkStyleValue == 0 ? @"square" : @"rounded"),
+        @"fontStyle": (SonoraSettingsFontStyleIndex() == 1 ? @"serif" : @"system"),
+        @"artworkStyle": (SonoraSettingsArtworkStyleIndex() == 0 ? @"square" : @"rounded"),
         @"accentHex": [self hexStringForColor:[self currentAccentColor]],
-        @"preservePlayerModes": @(preserveModes),
-        @"trackGapSeconds": @(trackGap),
-        @"maxStorageMb": @(maxStorageMb),
-        @"cacheOnlinePlaylistTracks": @(cacheOnlinePlaylistTracks),
-        @"onlinePlaylistCacheMaxMb": @(onlinePlaylistCacheMaxMb),
-        @"artworkEqualizer": @(artworkEqualizer)
+        @"preservePlayerModes": @(SonoraSettingsPreservePlayerModesEnabled()),
+        @"trackGapSeconds": @(SonoraSettingsTrackGapSeconds()),
+        @"maxStorageMb": @(SonoraSettingsMaxStorageMB()),
+        @"cacheOnlinePlaylistTracks": @(SonoraSettingsCacheOnlinePlaylistTracksEnabled()),
+        @"onlinePlaylistCacheMaxMb": @(SonoraSettingsOnlinePlaylistCacheMaxMB()),
+        @"artworkEqualizer": @(SonoraSettingsArtworkEqualizerEnabled())
     };
 }
 
@@ -3529,8 +3330,6 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         return;
     }
 
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-
     id fontValue = settings[@"fontStyle"];
     NSInteger fontIndex = 0;
     if ([fontValue isKindOfClass:NSString.class]) {
@@ -3538,7 +3337,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     } else if ([fontValue respondsToSelector:@selector(integerValue)]) {
         fontIndex = [fontValue integerValue];
     }
-    [defaults setInteger:MAX(0, MIN(1, fontIndex)) forKey:SonoraSettingsFontKey];
+    SonoraSettingsSetFontStyleIndex(MAX(0, MIN(1, fontIndex)));
 
     id artworkStyleValue = settings[@"artworkStyle"];
     NSInteger artworkIndex = 1;
@@ -3547,22 +3346,21 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     } else if ([artworkStyleValue respondsToSelector:@selector(integerValue)]) {
         artworkIndex = [artworkStyleValue integerValue];
     }
-    [defaults setInteger:MAX(0, MIN(1, artworkIndex)) forKey:SonoraSettingsArtworkStyleKey];
+    SonoraSettingsSetArtworkStyleIndex(MAX(0, MIN(1, artworkIndex)));
 
     id accentValue = settings[@"accentHex"];
     if ([accentValue isKindOfClass:NSString.class] && ((NSString *)accentValue).length > 0) {
-        [defaults setObject:accentValue forKey:SonoraSettingsAccentHexKey];
-        [defaults removeObjectForKey:SonoraSettingsLegacyAccentColorKey];
+        SonoraSettingsStoreAccentHex((NSString *)accentValue);
     }
 
     id preserveValue = settings[@"preservePlayerModes"];
     if ([preserveValue respondsToSelector:@selector(boolValue)]) {
-        [defaults setBool:[preserveValue boolValue] forKey:SonoraSettingsPreservePlayerModesKey];
+        SonoraSettingsSetPreservePlayerModesEnabled([preserveValue boolValue]);
     }
 
     id gapValue = settings[@"trackGapSeconds"];
     if ([gapValue respondsToSelector:@selector(doubleValue)]) {
-        [defaults setDouble:[self nearestTrackGapValueForValue:[gapValue doubleValue]] forKey:SonoraSettingsTrackGapKey];
+        SonoraSettingsSetTrackGapSeconds([self nearestTrackGapValueForValue:[gapValue doubleValue]]);
     }
 
     id maxStorageValue = settings[@"maxStorageMb"];
@@ -3570,12 +3368,12 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         maxStorageValue = settings[@"maxStorageMB"];
     }
     if ([maxStorageValue respondsToSelector:@selector(integerValue)]) {
-        [defaults setInteger:[self nearestMaxStorageValueForValue:[maxStorageValue integerValue]] forKey:SonoraSettingsMaxStorageMBKey];
+        SonoraSettingsSetMaxStorageMB([self nearestMaxStorageValueForValue:[maxStorageValue integerValue]]);
     }
 
     id cacheOnlinePlaylistTracksValue = settings[@"cacheOnlinePlaylistTracks"];
     if ([cacheOnlinePlaylistTracksValue respondsToSelector:@selector(boolValue)]) {
-        [defaults setBool:[cacheOnlinePlaylistTracksValue boolValue] forKey:SonoraSettingsCacheOnlinePlaylistTracksKey];
+        SonoraSettingsSetCacheOnlinePlaylistTracksEnabled([cacheOnlinePlaylistTracksValue boolValue]);
     }
 
     id onlinePlaylistCacheMaxValue = settings[@"onlinePlaylistCacheMaxMb"];
@@ -3583,13 +3381,12 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         onlinePlaylistCacheMaxValue = settings[@"onlinePlaylistCacheMaxMB"];
     }
     if ([onlinePlaylistCacheMaxValue respondsToSelector:@selector(integerValue)]) {
-        [defaults setInteger:[self nearestMaxStorageValueForValue:[onlinePlaylistCacheMaxValue integerValue]]
-                     forKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
+        SonoraSettingsSetOnlinePlaylistCacheMaxMB([self nearestMaxStorageValueForValue:[onlinePlaylistCacheMaxValue integerValue]]);
     }
 
     id artworkEqualizerValue = settings[@"artworkEqualizer"];
     if ([artworkEqualizerValue respondsToSelector:@selector(boolValue)]) {
-        [defaults setBool:[artworkEqualizerValue boolValue] forKey:SonoraSettingsArtworkEqualizerKey];
+        SonoraSettingsSetArtworkEqualizerEnabled([artworkEqualizerValue boolValue]);
     }
 }
 
@@ -4113,7 +3910,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         }
         [seed appendString:@"|"];
     }
-    return SonoraHomeStableHashString(seed) ?: @"0";
+    return SonoraStableHashString(seed) ?: @"0";
 }
 
 - (NSArray<SonoraTrack *> *)buildForYouTracksFromTracks:(NSArray<SonoraTrack *> *)tracks limit:(NSUInteger)limit {

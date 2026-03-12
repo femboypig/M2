@@ -7,6 +7,7 @@
 
 #import <objc/message.h>
 
+#import "SonoraSettings.h"
 #import "SonoraSharedPlaylists.h"
 #import "SonoraServices.h"
 
@@ -16,8 +17,6 @@ static NSString * const SonoraCollectionsFavoritesSummaryCellReuseID = @"SonoraC
 static NSString * const SonoraCollectionsFavoriteTrackCellReuseID = @"SonoraCollectionsFavoriteTrackCell";
 static NSString * const SonoraCollectionsHeaderReuseID = @"SonoraCollectionsHeader";
 static NSString * const SonoraCollectionsHeaderKind = @"SonoraCollectionsHeaderKind";
-static NSString * const SonoraCollectionsCacheOnlinePlaylistTracksKey = @"sonora.settings.cacheOnlinePlaylistTracks";
-
 typedef NS_ENUM(NSInteger, SonoraCollectionsSection) {
     SonoraCollectionsSectionFavoritesSummary = 0,
     SonoraCollectionsSectionFavoritesTracks = 1,
@@ -45,7 +44,7 @@ static SonoraSharedPlaylistSnapshot *SonoraCollectionsSharedSnapshotForPlaylistI
 static NSString *SonoraCollectionsSharedPlaylistSubtitle(id sharedSnapshot) {
     NSArray<SonoraTrack *> *tracks = [sharedSnapshot valueForKey:@"tracks"];
     NSUInteger totalTracks = [tracks isKindOfClass:NSArray.class] ? tracks.count : 0;
-    if (![NSUserDefaults.standardUserDefaults boolForKey:SonoraCollectionsCacheOnlinePlaylistTracksKey]) {
+    if (!SonoraSettingsCacheOnlinePlaylistTracksEnabled()) {
         return @"Online playlist • Streaming";
     }
     NSUInteger cachedTracks = 0;

@@ -12,7 +12,9 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #import "SonoraCells.h"
+#import "SonoraSettings.h"
 #import "SonoraSharedPlaylists.h"
+#import "SonoraSleepTimerUI.h"
 #import "SonoraServices.h"
 
 static UIColor *SonoraLovelyAccentRedColor(void) {
@@ -21,12 +23,6 @@ static UIColor *SonoraLovelyAccentRedColor(void) {
 
 static NSString * const SonoraLovelyPlaylistDefaultsKey = @"sonora_lovely_playlist_id_v1";
 static NSString * const SonoraLovelyPlaylistCoverMarkerKey = @"sonora_lovely_playlist_cover_marker_v2";
-static NSString * const SonoraSettingsFontKey = @"sonora.settings.font";
-static NSString * const SonoraSettingsAccentHexKey = @"sonora.settings.accentHex";
-static NSString * const SonoraSettingsLegacyAccentColorKey = @"sonora.settings.accentColor";
-static NSString * const SonoraSettingsArtworkStyleKey = @"sonora.settings.artworkStyle";
-static NSString * const SonoraSettingsArtworkEqualizerKey = @"sonora.settings.showArtworkEqualizer";
-static NSString * const SonoraSettingsMaxStorageMBKey = @"sonora.settings.maxStorageMB";
 static NSString * const SonoraMiniStreamingDefaultBackendBaseURLString = @"https://api.corebrew.ru";
 static NSString * const SonoraMiniStreamingBackendSearchPath = @"/api/spotify/search";
 static NSString * const SonoraMiniStreamingBackendDownloadPath = @"/api/download";
@@ -44,8 +40,6 @@ static NSString * const SonoraMiniStreamingInstalledTrackMapDefaultsKey = @"sono
 static NSString * const SonoraMiniStreamingInstallUnavailableMessage = @"Установка временно недоступна, попробуйте завтра.";
 static NSUInteger const SonoraMiniStreamingSearchLimit = 8;
 static NSString * const SonoraSharedPlaylistDefaultsKey = @"sonora.sharedPlaylists.v1";
-static NSString * const SonoraSettingsCacheOnlinePlaylistTracksKey = @"sonora.settings.cacheOnlinePlaylistTracks";
-static NSString * const SonoraSettingsOnlinePlaylistCacheMaxMBKey = @"sonora.settings.onlinePlaylistCacheMaxMB";
 static NSString * const SonoraSharedPlaylistSyntheticPrefix = @"shared:";
 static NSString * const SonoraSharedPlaylistDeepLinkHost = @"playlist";
 static NSString * const SonoraSharedPlaylistDeepLinkPath = @"/shared";
@@ -123,12 +117,7 @@ BOOL SonoraHandleMusicModuleDeepLinkURL(NSURL *url) {
                     }
                     return;
                 }
-                Class detailClass = NSClassFromString(@"SonoraPlaylistDetailViewController");
-                if (detailClass == Nil) {
-                    SonoraPresentAlert(top, @"Error", @"Could not open shared playlist.");
-                    return;
-                }
-                UIViewController *detail = [[detailClass alloc] initWithSharedPlaylistSnapshot:snapshot];
+                UIViewController *detail = [[SonoraPlaylistDetailViewController alloc] initWithSharedPlaylistSnapshot:snapshot];
                 detail.hidesBottomBarWhenPushed = YES;
                 UINavigationController *nav = top.navigationController;
                 if ([top isKindOfClass:UINavigationController.class]) {
@@ -192,10 +181,6 @@ static UIAlertController * _Nullable SonoraPresentBlockingProgressAlert(UIViewCo
     return alert;
 }
 
-static NSString *SonoraSleepTimerRemainingString(NSTimeInterval interval);
-static void SonoraPresentSleepTimerActionSheet(UIViewController *controller,
-                                               UIView *sourceView,
-                                               dispatch_block_t updateHandler);
 static void SonoraConfigureNavigationIconBarButtonItem(UIBarButtonItem *item, NSString *title) {
     if (![item isKindOfClass:UIBarButtonItem.class]) {
         return;
@@ -259,16 +244,15 @@ static UIColor *SonoraColorFromHexString(NSString *hexString) {
 }
 
 static UIColor *SonoraAccentYellowColor(void) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    UIColor *fromHex = SonoraColorFromHexString([defaults stringForKey:SonoraSettingsAccentHexKey]);
+    UIColor *fromHex = SonoraColorFromHexString(SonoraSettingsAccentHex());
     if (fromHex != nil) {
         return fromHex;
     }
-    return SonoraLegacyAccentColorForIndex([defaults integerForKey:SonoraSettingsLegacyAccentColorKey]);
+    return SonoraLegacyAccentColorForIndex(SonoraSettingsLegacyAccentColorIndex());
 }
 
 static SonoraPlayerFontStyle SonoraPlayerFontStyleFromDefaults(void) {
-    NSInteger raw = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsFontKey];
+    NSInteger raw = SonoraSettingsFontStyleIndex();
     if (raw < SonoraPlayerFontStyleSystem || raw > SonoraPlayerFontStyleSerif) {
         return SonoraPlayerFontStyleSystem;
     }
@@ -359,7 +343,7 @@ static UIFont *SonoraPlayerFontForStyle(SonoraPlayerFontStyle style, CGFloat siz
 }
 
 static SonoraPlayerArtworkStyle SonoraPlayerArtworkStyleFromDefaults(void) {
-    NSInteger raw = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsArtworkStyleKey];
+    NSInteger raw = SonoraSettingsArtworkStyleIndex();
     if (raw < SonoraPlayerArtworkStyleSquare || raw > SonoraPlayerArtworkStyleRounded) {
         return SonoraPlayerArtworkStyleRounded;
     }
@@ -367,11 +351,7 @@ static SonoraPlayerArtworkStyle SonoraPlayerArtworkStyleFromDefaults(void) {
 }
 
 static BOOL SonoraArtworkEqualizerEnabledFromDefaults(void) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    if ([defaults objectForKey:SonoraSettingsArtworkEqualizerKey] == nil) {
-        return YES;
-    }
-    return [defaults boolForKey:SonoraSettingsArtworkEqualizerKey];
+    return SonoraSettingsArtworkEqualizerEnabled();
 }
 
 static CGFloat SonoraArtworkCornerRadiusForStyle(SonoraPlayerArtworkStyle style, CGFloat width) {
@@ -2102,7 +2082,6 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
             return;
         }
 
-            __weak void (^weakAttemptCandidateAtIndex)(NSUInteger) = nil;
         [strongSelf fetchBrokerCredentialWithCompletion:^(NSString * _Nullable brokerHost, NSString * _Nullable brokerKey) {
             __strong typeof(weakSelf) innerSelf = weakSelf;
             if (innerSelf == nil) {
@@ -2122,6 +2101,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
             __block NSString *lastMessage = @"";
             __block BOOL sawDailyQuota = NO;
             __block void (^attemptCandidateAtIndex)(NSUInteger) = nil;
+            __weak void (^weakAttemptCandidateAtIndex)(NSUInteger) = nil;
             attemptCandidateAtIndex = ^(NSUInteger index) {
                 if (index >= candidates.count) {
                     NSString *finalMessage = sawDailyQuota ? SonoraMiniStreamingInstallUnavailableMessage : lastMessage;
@@ -2189,7 +2169,6 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                     NSString *message = SonoraTrimmedStringValue(json[@"message"]);
                     if (message.length == 0) {
                         message = SonoraTrimmedStringValue(json[@"error"]);
-            weakAttemptCandidateAtIndex = attemptCandidateAtIndex;
                     }
                     if (statusCode == 451) {
                         message = @"Требуется VPN из-за региональных ограничений (451).";
@@ -2210,6 +2189,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                 [task resume];
             };
 
+            weakAttemptCandidateAtIndex = attemptCandidateAtIndex;
             attemptCandidateAtIndex(0);
         }];
     };
@@ -2979,174 +2959,6 @@ static UIImage *SonoraSliderThumbImage(CGFloat diameter, UIColor *color) {
         UIBezierPath *path = [UIBezierPath bezierPathWithOvalInRect:circleRect];
         [path fill];
     }];
-}
-
-static NSString *SonoraSleepTimerRemainingString(NSTimeInterval interval) {
-    NSInteger totalSeconds = (NSInteger)llround(MAX(0.0, interval));
-    NSInteger hours = totalSeconds / 3600;
-    NSInteger minutes = (totalSeconds % 3600) / 60;
-    NSInteger seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-        return [NSString stringWithFormat:@"%ld:%02ld:%02ld", (long)hours, (long)minutes, (long)seconds];
-    }
-    return [NSString stringWithFormat:@"%ld:%02ld", (long)minutes, (long)seconds];
-}
-
-static NSTimeInterval SonoraSleepTimerDurationFromInput(NSString *input) {
-    NSString *trimmed = [input stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if (trimmed.length == 0) {
-        return 0.0;
-    }
-
-    NSArray<NSString *> *colonParts = [trimmed componentsSeparatedByString:@":"];
-    if (colonParts.count == 2 || colonParts.count == 3) {
-        NSMutableArray<NSNumber *> *values = [NSMutableArray arrayWithCapacity:colonParts.count];
-        for (NSString *part in colonParts) {
-            NSString *token = [part stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (token.length == 0) {
-                return 0.0;
-            }
-
-            NSScanner *scanner = [NSScanner scannerWithString:token];
-            NSInteger value = 0;
-            if (![scanner scanInteger:&value] || !scanner.isAtEnd || value < 0) {
-                return 0.0;
-            }
-            [values addObject:@(value)];
-        }
-
-        NSTimeInterval duration = 0.0;
-        if (values.count == 2) {
-            NSInteger hours = values[0].integerValue;
-            NSInteger minutes = values[1].integerValue;
-            if (minutes >= 60) {
-                return 0.0;
-            }
-            duration = (NSTimeInterval)(hours * 3600 + minutes * 60);
-        } else {
-            NSInteger hours = values[0].integerValue;
-            NSInteger minutes = values[1].integerValue;
-            NSInteger seconds = values[2].integerValue;
-            if (minutes >= 60 || seconds >= 60) {
-                return 0.0;
-            }
-            duration = (NSTimeInterval)(hours * 3600 + minutes * 60 + seconds);
-        }
-
-        if (duration <= 0.0 || duration > 24.0 * 3600.0) {
-            return 0.0;
-        }
-        return duration;
-    }
-
-    NSScanner *scanner = [NSScanner scannerWithString:trimmed];
-    double minutesValue = 0.0;
-    if (![scanner scanDouble:&minutesValue] || !scanner.isAtEnd) {
-        return 0.0;
-    }
-
-    NSTimeInterval duration = minutesValue * 60.0;
-    if (!isfinite(duration) || duration <= 0.0 || duration > 24.0 * 3600.0) {
-        return 0.0;
-    }
-    return duration;
-}
-
-static void SonoraPresentCustomSleepTimerAlert(UIViewController *controller, dispatch_block_t updateHandler) {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Custom Sleep Timer"
-                                                                   message:@"Enter minutes (e.g. 25) or h:mm (e.g. 1:30)."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"25 or 1:30";
-        textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
-        NSTimeInterval remaining = SonoraSleepTimerManager.sharedManager.remainingTime;
-        if (remaining > 0.0) {
-            textField.text = [NSString stringWithFormat:@"%.0f", ceil(remaining / 60.0)];
-        }
-    }];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Set Timer"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction * _Nonnull action) {
-        NSString *rawValue = alert.textFields.firstObject.text ?: @"";
-        NSTimeInterval duration = SonoraSleepTimerDurationFromInput(rawValue);
-        if (duration <= 0.0) {
-            SonoraPresentAlert(controller,
-                           @"Invalid Time",
-                           @"Use minutes (25) or h:mm (1:30). Max is 24 hours.");
-            return;
-        }
-
-        [SonoraSleepTimerManager.sharedManager startWithDuration:duration];
-        if (updateHandler != nil) {
-            updateHandler();
-        }
-    }]];
-
-    [controller presentViewController:alert animated:YES completion:nil];
-}
-
-static void SonoraPresentSleepTimerActionSheet(UIViewController *controller,
-                                           UIView *sourceView,
-                                           dispatch_block_t updateHandler) {
-    SonoraSleepTimerManager *sleepTimer = SonoraSleepTimerManager.sharedManager;
-    NSString *message = sleepTimer.isActive
-    ? [NSString stringWithFormat:@"Will stop playback in %@.", SonoraSleepTimerRemainingString(sleepTimer.remainingTime)]
-    : @"Stop playback automatically after selected time.";
-
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Sleep Timer"
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-
-    NSArray<NSNumber *> *durations = @[@(15 * 60), @(30 * 60), @(45 * 60), @(60 * 60)];
-    for (NSNumber *durationValue in durations) {
-        NSInteger minutes = durationValue.integerValue / 60;
-        NSString *title = [NSString stringWithFormat:@"%ld min", (long)minutes];
-        [sheet addAction:[UIAlertAction actionWithTitle:title
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction * _Nonnull action) {
-            [SonoraSleepTimerManager.sharedManager startWithDuration:durationValue.doubleValue];
-            if (updateHandler != nil) {
-                updateHandler();
-            }
-        }]];
-    }
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Custom..."
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction * _Nonnull action) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            SonoraPresentCustomSleepTimerAlert(controller, updateHandler);
-        });
-    }]];
-
-    if (sleepTimer.isActive) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Turn Off Sleep Timer"
-                                                  style:UIAlertActionStyleDestructive
-                                                handler:^(__unused UIAlertAction * _Nonnull action) {
-            [SonoraSleepTimerManager.sharedManager cancel];
-            if (updateHandler != nil) {
-                updateHandler();
-            }
-        }]];
-    }
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-
-    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
-    if (popover != nil) {
-        UIView *anchorView = sourceView ?: controller.view;
-        popover.sourceView = anchorView;
-        popover.sourceRect = anchorView.bounds;
-    }
-
-    [controller presentViewController:sheet animated:YES completion:nil];
 }
 
 @interface SonoraPlayerViewController : UIViewController
@@ -4930,8 +4742,6 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     });
 }
 
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[audioType]
-                                                                                                          asCopy:YES];
 - (void)stopMiniStreamingPlaceholderIfNeededForTrackID:(NSString *)trackID {
     if (trackID.length == 0) {
         return;
@@ -5120,6 +4930,8 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     if (audioType == nil) {
         audioType = UTTypeAudio;
     }
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[audioType]
+                                                                                                          asCopy:YES];
     picker.delegate = self;
     picker.allowsMultipleSelection = YES;
     picker.modalPresentationStyle = UIModalPresentationFormSheet;
@@ -5241,8 +5053,7 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
 }
 
 - (unsigned long long)maxLibraryStorageBytes {
-    NSInteger raw = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsMaxStorageMBKey];
-    NSInteger valueMB = raw;
+    NSInteger valueMB = SonoraSettingsMaxStorageMB();
     if (valueMB <= 0) {
         return ULLONG_MAX;
     }
@@ -6324,7 +6135,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     SonoraSharedPlaylistSnapshot *sharedSnapshot = [SonoraSharedPlaylistStore.sharedStore snapshotForPlaylistID:playlist.playlistID];
     if (sharedSnapshot != nil) {
         cover = sharedSnapshot.coverImage ?: sharedSnapshot.tracks.firstObject.artwork;
-        BOOL cacheAudioEnabled = [NSUserDefaults.standardUserDefaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey];
+        BOOL cacheAudioEnabled = SonoraSettingsCacheOnlinePlaylistTracksEnabled();
         NSUInteger totalTracks = sharedSnapshot.tracks.count;
         NSUInteger cachedTracks = 0;
         for (SonoraTrack *track in sharedSnapshot.tracks) {
@@ -7700,6 +7511,7 @@ replacementString:(NSString *)string {
     }
 
     self.sharedCoverLoading = YES;
+    __weak typeof(self) weakSelf = self;
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url
                                                             completionHandler:^(NSData * _Nullable data,
                                                                                 NSURLResponse * _Nullable response,
@@ -7916,7 +7728,6 @@ replacementString:(NSString *)string {
         return;
     }
     UIAlertController *progress = SonoraPresentBlockingProgressAlert(self, @"Sharing Playlist", @"Uploading tracks to server...");
-    __weak typeof(self) weakSelf = self;
     NSString *playlistName = self.playlist.name ?: @"Playlist";
     NSArray<SonoraTrack *> *tracksSnapshot = [self.tracks copy];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -9515,7 +9326,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
         if (![storedSharedPlaylists isKindOfClass:NSArray.class] || storedSharedPlaylists.count == 0) {
             return;
         }
-        if (![NSUserDefaults.standardUserDefaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey]) {
+        if (!SonoraSettingsCacheOnlinePlaylistTracksEnabled()) {
             NSArray<NSURL *> *files = [NSFileManager.defaultManager contentsOfDirectoryAtURL:[NSURL fileURLWithPath:SonoraSharedPlaylistAudioCacheDirectoryPath()]
                                                                   includingPropertiesForKeys:nil
                                                                                      options:NSDirectoryEnumerationSkipsHiddenFiles

@@ -13,6 +13,7 @@
 #import <objc/message.h>
 
 #import "AppDelegate.h"
+#import "SonoraSettings.h"
 
 NSString * const SonoraPlaybackStateDidChangeNotification = @"SonoraPlaybackStateDidChangeNotification";
 NSString * const SonoraPlaybackProgressDidChangeNotification = @"SonoraPlaybackProgressDidChangeNotification";
@@ -43,10 +44,8 @@ static NSString * const kTrackMetadataCacheDurationKey = @"duration";
 static NSString * const kTrackMetadataCacheArtworkFileKey = @"artworkFile";
 static NSString * const kPlaybackHistoryDefaultsKey = @"sonora_playback_history_v1";
 static NSUInteger const kPlaybackHistoryMaxEntries = 160;
-static NSString * const kPlayerSettingsTrackGapKey = @"sonora.settings.trackGapSeconds";
 static NSString * const kPlayerSettingsSavedShuffleKey = @"sonora.settings.savedShuffleEnabled";
 static NSString * const kPlayerSettingsSavedRepeatModeKey = @"sonora.settings.savedRepeatMode";
-static NSString * const kPlayerSettingsPreserveModesKey = @"sonora.settings.preservePlayerModes";
 static NSString * const kPlaybackSessionQueueTrackIDsKey = @"sonora.playbackSession.queueTrackIDs";
 static NSString * const kPlaybackSessionCurrentTrackIDKey = @"sonora.playbackSession.currentTrackID";
 static NSString * const kPlaybackSessionCurrentTimeKey = @"sonora.playbackSession.currentTime";
@@ -58,17 +57,15 @@ static NSString * const kDiagnosticsLogFileBackupName = @"runtime-prev.log";
 static unsigned long long const kDiagnosticsLogMaxBytes = 4ull * 1024ull * 1024ull;
 
 static BOOL SonoraShouldPreservePlayerModes(NSUserDefaults *defaults) {
-    if ([defaults objectForKey:kPlayerSettingsPreserveModesKey] == nil) {
-        return YES;
-    }
-    return [defaults boolForKey:kPlayerSettingsPreserveModesKey];
+    (void)defaults;
+    return SonoraSettingsPreservePlayerModesEnabled();
 }
 
 static NSArray<NSString *> *SonoraLegacyPlaylistsDefaultsKeys(void) {
     return @[@"sonora_playlists_v1", @"sonora_playlists"];
 }
 
-static NSString *SonoraStableHashString(NSString *value) {
+NSString *SonoraStableHashString(NSString *value) {
     if (value.length == 0) {
         return @"0";
     }
@@ -2664,12 +2661,7 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
 }
 
 - (NSTimeInterval)configuredTrackGapSeconds {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    if ([defaults objectForKey:kPlayerSettingsTrackGapKey] == nil) {
-        return 0.0;
-    }
-
-    NSTimeInterval value = [defaults doubleForKey:kPlayerSettingsTrackGapKey];
+    NSTimeInterval value = SonoraSettingsTrackGapSeconds();
     if (!isfinite(value)) {
         return 0.0;
     }

@@ -1,9 +1,8 @@
 #import "SonoraSharedPlaylists.h"
+#import "SonoraSettings.h"
 
 static NSString * const SonoraMiniStreamingDefaultBackendBaseURLString = @"https://api.corebrew.ru";
 static NSString * const SonoraSharedPlaylistDefaultsKey = @"sonora.sharedPlaylists.v1";
-static NSString * const SonoraSettingsCacheOnlinePlaylistTracksKey = @"sonora.settings.cacheOnlinePlaylistTracks";
-static NSString * const SonoraSettingsOnlinePlaylistCacheMaxMBKey = @"sonora.settings.onlinePlaylistCacheMaxMB";
 static NSString * const SonoraSharedPlaylistSyntheticPrefix = @"shared:";
 static NSString * const SonoraSharedPlaylistSuppressDidChangeNotificationThreadKey = @"sonora.sharedPlaylists.suppressDidChangeNotification";
 
@@ -389,13 +388,11 @@ void SonoraSharedPlaylistWarmPersistentCache(SonoraSharedPlaylistSnapshot *snaps
         track.artwork = SonoraSharedPlaylistFetchImage(artworkURL);
         persistSnapshotIfNeeded();
     }
-    if ([NSUserDefaults.standardUserDefaults boolForKey:SonoraSettingsCacheOnlinePlaylistTracksKey]) {
+    if (SonoraSettingsCacheOnlinePlaylistTracksEnabled()) {
         unsigned long long limitBytes = ULLONG_MAX;
-        if ([NSUserDefaults.standardUserDefaults objectForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey] != nil) {
-            NSInteger maxMB = [NSUserDefaults.standardUserDefaults integerForKey:SonoraSettingsOnlinePlaylistCacheMaxMBKey];
-            if (maxMB > 0) {
-                limitBytes = ((unsigned long long)maxMB) * 1024ULL * 1024ULL;
-            }
+        NSInteger maxMB = SonoraSettingsOnlinePlaylistCacheMaxMB();
+        if (maxMB > 0) {
+            limitBytes = ((unsigned long long)maxMB) * 1024ULL * 1024ULL;
         } else {
             limitBytes = 1024ULL * 1024ULL * 1024ULL;
         }
