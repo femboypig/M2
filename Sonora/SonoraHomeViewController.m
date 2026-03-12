@@ -466,6 +466,29 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     return (SonoraMyWaveLook)storedValue;
 }
 
+static CGFloat SonoraLayerPresentationFloat(CALayer *layer, NSString *keyPath, CGFloat fallback) {
+    id presentationValue = [layer.presentationLayer valueForKeyPath:keyPath];
+    if ([presentationValue respondsToSelector:@selector(doubleValue)]) {
+        return (CGFloat)[presentationValue doubleValue];
+    }
+    id modelValue = [layer valueForKeyPath:keyPath];
+    if ([modelValue respondsToSelector:@selector(doubleValue)]) {
+        return (CGFloat)[modelValue doubleValue];
+    }
+    return fallback;
+}
+
+static CGPathRef SonoraShapeLayerPresentationPath(CAShapeLayer *layer) {
+    return ((CAShapeLayer *)layer.presentationLayer).path ?: layer.path;
+}
+
+static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
+    CATransform3D transform = CATransform3DIdentity;
+    transform = CATransform3DScale(transform, scale, scale, 1.0f);
+    transform = CATransform3DRotate(transform, rotation, 0.0f, 0.0f, 1.0f);
+    return transform;
+}
+
 @interface SonoraWaveAnimatedBackgroundView : UIView
 
 - (void)applyPalette:(NSArray<UIColor *> *)palette animated:(BOOL)animated;
@@ -492,6 +515,17 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
 @property (nonatomic, assign) CGSize configuredSize;
 @property (nonatomic, copy, nullable) NSString *currentTrackIdentifier;
 @property (nonatomic, assign) NSUInteger geometryTransitionGeneration;
+@property (nonatomic, copy) NSArray<UIBezierPath *> *cachedLinePaths;
+@property (nonatomic, copy) NSArray<NSNumber *> *cachedLineOpacities;
+@property (nonatomic, copy) NSArray<NSNumber *> *cachedLineShadowOpacities;
+@property (nonatomic, copy) NSArray<NSNumber *> *cachedLineScales;
+@property (nonatomic, copy) NSArray<NSNumber *> *cachedLineRotations;
+@property (nonatomic, assign) CGFloat cachedLineContainerOpacity;
+@property (nonatomic, assign) CGFloat cachedHaloOpacity;
+@property (nonatomic, assign) CGFloat cachedCoreOpacity;
+@property (nonatomic, assign) CGFloat cachedHaloScale;
+@property (nonatomic, assign) CGFloat cachedCoreScale;
+@property (nonatomic, assign) BOOL hasCachedAnimationSnapshot;
 
 @end
 
@@ -614,6 +648,88 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     edgeFadeMask.locations = @[@0.0, @0.14, @0.24, @0.92, @1.0];
     self.layer.mask = edgeFadeMask;
     self.edgeFadeMaskLayer = edgeFadeMask;
+}
+
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    if (newWindow == nil) {
+        [self captureAnimationSnapshot];
+    }
+    [super willMoveToWindow:newWindow];
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    if (self.window != nil) {
+        [self restoreAnimationSnapshotIfNeeded];
+        [self ensureAnimationsRunning];
+    }
+}
+
+- (void)captureAnimationSnapshot {
+    if (self.lineLayers.count == 0) {
+        return;
+    }
+
+    NSMutableArray<UIBezierPath *> *paths = [NSMutableArray arrayWithCapacity:self.lineLayers.count];
+    NSMutableArray<NSNumber *> *opacities = [NSMutableArray arrayWithCapacity:self.lineLayers.count];
+    NSMutableArray<NSNumber *> *shadowOpacities = [NSMutableArray arrayWithCapacity:self.lineLayers.count];
+    NSMutableArray<NSNumber *> *scales = [NSMutableArray arrayWithCapacity:self.lineLayers.count];
+    NSMutableArray<NSNumber *> *rotations = [NSMutableArray arrayWithCapacity:self.lineLayers.count];
+
+    [self.lineLayers enumerateObjectsUsingBlock:^(CAShapeLayer * _Nonnull line, NSUInteger idx, BOOL * _Nonnull stop) {
+        (void)idx;
+        (void)stop;
+        CGPathRef currentPath = SonoraShapeLayerPresentationPath(line);
+        [paths addObject:(currentPath != NULL) ? [UIBezierPath bezierPathWithCGPath:currentPath] : [UIBezierPath bezierPath]];
+        [opacities addObject:@(SonoraLayerPresentationFloat(line, @"opacity", line.opacity))];
+        [shadowOpacities addObject:@(SonoraLayerPresentationFloat(line, @"shadowOpacity", line.shadowOpacity))];
+        [scales addObject:@(SonoraLayerPresentationFloat(line, @"transform.scale", 1.0f))];
+        [rotations addObject:@(SonoraLayerPresentationFloat(line, @"transform.rotation.z", 0.0f))];
+    }];
+
+    self.cachedLinePaths = paths.copy;
+    self.cachedLineOpacities = opacities.copy;
+    self.cachedLineShadowOpacities = shadowOpacities.copy;
+    self.cachedLineScales = scales.copy;
+    self.cachedLineRotations = rotations.copy;
+    self.cachedLineContainerOpacity = SonoraLayerPresentationFloat(self.lineContainerLayer, @"opacity", self.lineContainerLayer.opacity);
+    self.cachedHaloOpacity = SonoraLayerPresentationFloat(self.haloLayer, @"opacity", self.haloLayer.opacity);
+    self.cachedCoreOpacity = SonoraLayerPresentationFloat(self.coreGlowLayer, @"opacity", self.coreGlowLayer.opacity);
+    self.cachedHaloScale = SonoraLayerPresentationFloat(self.haloLayer, @"transform.scale", 1.0f);
+    self.cachedCoreScale = SonoraLayerPresentationFloat(self.coreGlowLayer, @"transform.scale", 1.0f);
+    self.hasCachedAnimationSnapshot = YES;
+}
+
+- (void)restoreAnimationSnapshotIfNeeded {
+    if (!self.hasCachedAnimationSnapshot) {
+        return;
+    }
+
+    NSUInteger lineCount = MIN(self.lineLayers.count, self.cachedLinePaths.count);
+    for (NSUInteger idx = 0; idx < lineCount; idx += 1) {
+        CAShapeLayer *line = self.lineLayers[idx];
+        UIBezierPath *cachedPath = self.cachedLinePaths[idx];
+        if ([cachedPath isKindOfClass:UIBezierPath.class]) {
+            line.path = cachedPath.CGPath;
+        }
+        if (idx < self.cachedLineOpacities.count) {
+            line.opacity = self.cachedLineOpacities[idx].floatValue;
+        }
+        if (idx < self.cachedLineShadowOpacities.count) {
+            line.shadowOpacity = self.cachedLineShadowOpacities[idx].floatValue;
+        }
+        CGFloat scale = (idx < self.cachedLineScales.count) ? self.cachedLineScales[idx].floatValue : 1.0f;
+        CGFloat rotation = (idx < self.cachedLineRotations.count) ? self.cachedLineRotations[idx].floatValue : 0.0f;
+        line.transform = SonoraWaveTransform(scale, rotation);
+    }
+
+    self.lineContainerLayer.opacity = self.cachedLineContainerOpacity;
+    self.haloLayer.opacity = self.cachedHaloOpacity;
+    self.coreGlowLayer.opacity = self.cachedCoreOpacity;
+    self.haloLayer.transform = CATransform3DMakeScale(self.cachedHaloScale, self.cachedHaloScale, 1.0f);
+    self.coreGlowLayer.transform = CATransform3DMakeScale(self.cachedCoreScale, self.cachedCoreScale, 1.0f);
+
+    self.hasCachedAnimationSnapshot = NO;
 }
 
 - (void)layoutSubviews {
@@ -864,7 +980,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     return path;
 }
 
-- (void)restartLineAnimations {
+- (void)restartLinePathAnimationsPreservingCurrentState:(BOOL)preserveCurrentState {
     if (CGRectIsEmpty(self.bounds)) {
         return;
     }
@@ -874,25 +990,21 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     [self.lineLayers enumerateObjectsUsingBlock:^(CAShapeLayer * _Nonnull line, NSUInteger idx, BOOL * _Nonnull stop) {
         (void)stop;
         [line removeAnimationForKey:@"sonora_wave_line_path"];
-        [line removeAnimationForKey:@"sonora_wave_line_scale"];
-        [line removeAnimationForKey:@"sonora_wave_line_rotation"];
-        [line removeAnimationForKey:@"sonora_wave_line_shadow"];
-        [line removeAnimationForKey:@"sonora_wave_line_opacity"];
+        [line removeAnimationForKey:@"sonora_wave_line_transition"];
+        [line removeAnimationForKey:@"sonora_wave_line_width_transition"];
 
         UIBezierPath *path0 = [self contourPathForIndex:idx variant:0];
         UIBezierPath *path1 = [self contourPathForIndex:idx variant:1];
         UIBezierPath *path2 = [self contourPathForIndex:idx variant:2];
-        line.path = path0.CGPath;
-
-        CGFloat baseOpacity = self.playing
-        ? (idx < 2 ? 0.96f : (idx < 4 ? 0.82f : 0.66f))
-        : (idx < 2 ? 0.78f : (idx < 4 ? 0.64f : 0.52f));
-        CGFloat swing = self.playing ? 0.16f : 0.10f;
-        line.opacity = baseOpacity;
+        CGPathRef startingPath = preserveCurrentState ? SonoraShapeLayerPresentationPath(line) : path0.CGPath;
+        if (startingPath == NULL) {
+            startingPath = path0.CGPath;
+        }
+        line.path = startingPath;
 
         CAKeyframeAnimation *pathAnim = [CAKeyframeAnimation animationWithKeyPath:@"path"];
         pathAnim.values = @[
-            (__bridge id)path0.CGPath,
+            (__bridge id)startingPath,
             (__bridge id)path1.CGPath,
             (__bridge id)path2.CGPath,
             (__bridge id)path0.CGPath
@@ -908,10 +1020,38 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
             [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]
         ];
         [line addAnimation:pathAnim forKey:@"sonora_wave_line_path"];
+    }];
+}
+
+- (void)restartLineEmphasisAnimationsPreservingCurrentState:(BOOL)preserveCurrentState {
+    if (CGRectIsEmpty(self.bounds)) {
+        return;
+    }
+    self.hasStartedAnimations = YES;
+
+    CGFloat durationMultiplier = self.playing ? 1.0f : 1.28f;
+    [self.lineLayers enumerateObjectsUsingBlock:^(CAShapeLayer * _Nonnull line, NSUInteger idx, BOOL * _Nonnull stop) {
+        (void)stop;
+        [line removeAnimationForKey:@"sonora_wave_line_scale"];
+        [line removeAnimationForKey:@"sonora_wave_line_rotation"];
+        [line removeAnimationForKey:@"sonora_wave_line_shadow"];
+        [line removeAnimationForKey:@"sonora_wave_line_opacity"];
+
+        CGFloat baseOpacity = self.playing
+        ? (idx < 2 ? 0.96f : (idx < 4 ? 0.82f : 0.66f))
+        : (idx < 2 ? 0.78f : (idx < 4 ? 0.64f : 0.52f));
+        CGFloat swing = self.playing ? 0.16f : 0.10f;
+        CGFloat currentOpacity = preserveCurrentState ? SonoraLayerPresentationFloat(line, @"opacity", line.opacity) : baseOpacity;
+        CGFloat currentShadowOpacity = preserveCurrentState ? SonoraLayerPresentationFloat(line, @"shadowOpacity", line.shadowOpacity) : line.shadowOpacity;
+        CGFloat currentScale = preserveCurrentState ? SonoraLayerPresentationFloat(line, @"transform.scale", 1.0f) : (0.998f - (((CGFloat)idx) * 0.0008f));
+        CGFloat currentRotation = preserveCurrentState ? SonoraLayerPresentationFloat(line, @"transform.rotation.z", 0.0f) : 0.0f;
+        line.opacity = currentOpacity;
+        line.shadowOpacity = currentShadowOpacity;
+        line.transform = SonoraWaveTransform(currentScale, currentRotation);
 
         CAKeyframeAnimation *opacityAnim = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
         opacityAnim.values = @[
-            @(baseOpacity - (swing * 0.35f)),
+            @(currentOpacity),
             @(baseOpacity + swing),
             @(baseOpacity - (swing * 0.18f)),
             @(baseOpacity - (swing * 0.35f))
@@ -929,7 +1069,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
 
         if (self.playing) {
             CABasicAnimation *scaleAnim = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-            scaleAnim.fromValue = @(0.998f - (((CGFloat)idx) * 0.0008f));
+            scaleAnim.fromValue = @(currentScale);
             scaleAnim.toValue = @(1.010f + (((CGFloat)idx) * 0.0012f));
             scaleAnim.duration = 7.4 + (((CGFloat)idx) * 0.70f);
             scaleAnim.autoreverses = YES;
@@ -940,7 +1080,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
 
             CABasicAnimation *rotationAnim = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
             CGFloat rotation = 0.0016f + (((CGFloat)idx) * 0.0006f);
-            rotationAnim.fromValue = @(-rotation);
+            rotationAnim.fromValue = @(currentRotation);
             rotationAnim.toValue = @(rotation);
             rotationAnim.duration = 12.2 + (((CGFloat)idx) * 0.80f);
             rotationAnim.autoreverses = YES;
@@ -950,7 +1090,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
             [line addAnimation:rotationAnim forKey:@"sonora_wave_line_rotation"];
 
             CABasicAnimation *shadowAnim = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
-            shadowAnim.fromValue = @(MAX(0.0f, line.shadowOpacity * 0.78f));
+            shadowAnim.fromValue = @(currentShadowOpacity);
             shadowAnim.toValue = @(MIN(1.0f, line.shadowOpacity + 0.18f));
             shadowAnim.duration = 5.6 + (((CGFloat)idx) * 0.55f);
             shadowAnim.autoreverses = YES;
@@ -962,14 +1102,32 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     }];
 }
 
-- (void)restartGlowAnimations {
+- (void)restartLineAnimationsPreservingCurrentState:(BOOL)preserveCurrentState {
+    [self restartLinePathAnimationsPreservingCurrentState:preserveCurrentState];
+    [self restartLineEmphasisAnimationsPreservingCurrentState:preserveCurrentState];
+}
+
+- (void)restartLineAnimations {
+    [self restartLineAnimationsPreservingCurrentState:NO];
+}
+
+- (void)restartGlowAnimationsPreservingCurrentState:(BOOL)preserveCurrentState {
     [self.haloLayer removeAnimationForKey:@"sonora_wave_halo_scale"];
     [self.haloLayer removeAnimationForKey:@"sonora_wave_halo_opacity"];
     [self.coreGlowLayer removeAnimationForKey:@"sonora_wave_core_scale"];
     [self.coreGlowLayer removeAnimationForKey:@"sonora_wave_core_opacity"];
 
+    CGFloat currentHaloScale = preserveCurrentState ? SonoraLayerPresentationFloat(self.haloLayer, @"transform.scale", 1.0f) : (self.playing ? 0.96f : 0.985f);
+    CGFloat currentCoreScale = preserveCurrentState ? SonoraLayerPresentationFloat(self.coreGlowLayer, @"transform.scale", 1.0f) : (self.playing ? 0.92f : 0.96f);
+    CGFloat currentHaloOpacity = preserveCurrentState ? SonoraLayerPresentationFloat(self.haloLayer, @"opacity", self.haloLayer.opacity) : (self.playing ? 0.80f : 0.64f);
+    CGFloat currentCoreOpacity = preserveCurrentState ? SonoraLayerPresentationFloat(self.coreGlowLayer, @"opacity", self.coreGlowLayer.opacity) : (self.playing ? 0.52f : 0.38f);
+    self.haloLayer.transform = CATransform3DMakeScale(currentHaloScale, currentHaloScale, 1.0f);
+    self.coreGlowLayer.transform = CATransform3DMakeScale(currentCoreScale, currentCoreScale, 1.0f);
+    self.haloLayer.opacity = currentHaloOpacity;
+    self.coreGlowLayer.opacity = currentCoreOpacity;
+
     CABasicAnimation *haloScale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-    haloScale.fromValue = @(self.playing ? 0.96f : 0.985f);
+    haloScale.fromValue = @(currentHaloScale);
     haloScale.toValue = @(self.playing ? 1.08f : 1.03f);
     haloScale.duration = self.playing ? 4.2 : 6.0;
     haloScale.autoreverses = YES;
@@ -978,7 +1136,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     [self.haloLayer addAnimation:haloScale forKey:@"sonora_wave_halo_scale"];
 
     CABasicAnimation *haloOpacity = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    haloOpacity.fromValue = @(self.playing ? 0.80f : 0.64f);
+    haloOpacity.fromValue = @(currentHaloOpacity);
     haloOpacity.toValue = @(self.playing ? 1.0f : 0.82f);
     haloOpacity.duration = self.playing ? 3.6 : 5.4;
     haloOpacity.autoreverses = YES;
@@ -987,7 +1145,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     [self.haloLayer addAnimation:haloOpacity forKey:@"sonora_wave_halo_opacity"];
 
     CABasicAnimation *coreScale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-    coreScale.fromValue = @(self.playing ? 0.92f : 0.96f);
+    coreScale.fromValue = @(currentCoreScale);
     coreScale.toValue = @(self.playing ? 1.04f : 1.01f);
     coreScale.duration = self.playing ? 5.4 : 7.2;
     coreScale.autoreverses = YES;
@@ -996,13 +1154,17 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     [self.coreGlowLayer addAnimation:coreScale forKey:@"sonora_wave_core_scale"];
 
     CABasicAnimation *coreOpacity = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    coreOpacity.fromValue = @(self.playing ? 0.52f : 0.38f);
+    coreOpacity.fromValue = @(currentCoreOpacity);
     coreOpacity.toValue = @(self.playing ? 0.82f : 0.58f);
     coreOpacity.duration = self.playing ? 4.8 : 6.6;
     coreOpacity.autoreverses = YES;
     coreOpacity.repeatCount = HUGE_VALF;
     coreOpacity.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [self.coreGlowLayer addAnimation:coreOpacity forKey:@"sonora_wave_core_opacity"];
+}
+
+- (void)restartGlowAnimations {
+    [self restartGlowAnimationsPreservingCurrentState:NO];
 }
 
 - (void)restartAnimations {
@@ -1015,13 +1177,23 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
         return;
     }
 
-    __block BOOL isMissingLineAnimations = NO;
+    [self restoreAnimationSnapshotIfNeeded];
+
+    __block BOOL isMissingLinePathAnimations = NO;
+    __block BOOL isMissingLineEmphasisAnimations = NO;
     [self.lineLayers enumerateObjectsUsingBlock:^(CAShapeLayer * _Nonnull line, NSUInteger idx, BOOL * _Nonnull stop) {
         (void)idx;
-        if ([line animationForKey:@"sonora_wave_line_path"] == nil ||
-            [line animationForKey:@"sonora_wave_line_opacity"] == nil ||
-            (self.playing && [line animationForKey:@"sonora_wave_line_scale"] == nil)) {
-            isMissingLineAnimations = YES;
+        if ([line animationForKey:@"sonora_wave_line_path"] == nil) {
+            isMissingLinePathAnimations = YES;
+        }
+        if ([line animationForKey:@"sonora_wave_line_opacity"] == nil ||
+            (self.playing &&
+             ([line animationForKey:@"sonora_wave_line_scale"] == nil ||
+              [line animationForKey:@"sonora_wave_line_rotation"] == nil ||
+              [line animationForKey:@"sonora_wave_line_shadow"] == nil))) {
+            isMissingLineEmphasisAnimations = YES;
+        }
+        if (isMissingLinePathAnimations || isMissingLineEmphasisAnimations) {
             *stop = YES;
         }
     }];
@@ -1032,11 +1204,14 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     ([self.coreGlowLayer animationForKey:@"sonora_wave_core_scale"] == nil) ||
     ([self.coreGlowLayer animationForKey:@"sonora_wave_core_opacity"] == nil);
 
-    if (isMissingLineAnimations) {
-        [self restartLineAnimations];
+    if (isMissingLinePathAnimations) {
+        [self restartLinePathAnimationsPreservingCurrentState:YES];
+    }
+    if (isMissingLineEmphasisAnimations) {
+        [self restartLineEmphasisAnimationsPreservingCurrentState:YES];
     }
     if (isMissingGlowAnimations) {
-        [self restartGlowAnimations];
+        [self restartGlowAnimationsPreservingCurrentState:YES];
     }
     [self updatePlaybackStateAnimated:NO];
 }
@@ -1071,19 +1246,9 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
         CGFloat currentWidth = ((CAShapeLayer *)line.presentationLayer).lineWidth > 0.0f
         ? ((CAShapeLayer *)line.presentationLayer).lineWidth
         : line.lineWidth;
-        CGFloat currentOpacity = ((CAShapeLayer *)line.presentationLayer).opacity > 0.0f
-        ? ((CAShapeLayer *)line.presentationLayer).opacity
-        : line.opacity;
-        CGFloat currentShadowOpacity = ((CAShapeLayer *)line.presentationLayer).shadowOpacity > 0.0f
-        ? ((CAShapeLayer *)line.presentationLayer).shadowOpacity
-        : line.shadowOpacity;
         CGFloat targetWidth = lineWidths[idx].doubleValue;
 
         [line removeAnimationForKey:@"sonora_wave_line_path"];
-        [line removeAnimationForKey:@"sonora_wave_line_scale"];
-        [line removeAnimationForKey:@"sonora_wave_line_rotation"];
-        [line removeAnimationForKey:@"sonora_wave_line_shadow"];
-        [line removeAnimationForKey:@"sonora_wave_line_opacity"];
         [line removeAnimationForKey:@"sonora_wave_line_transition"];
         [line removeAnimationForKey:@"sonora_wave_line_width_transition"];
 
@@ -1103,8 +1268,6 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
         widthTransition.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
         [line addAnimation:widthTransition forKey:@"sonora_wave_line_width_transition"];
 
-        line.opacity = currentOpacity;
-        line.shadowOpacity = currentShadowOpacity;
         line.lineWidth = targetWidth;
         line.path = targetPath.CGPath;
     }];
@@ -1113,7 +1276,7 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
         if (self.geometryTransitionGeneration != generation) {
             return;
         }
-        [self restartLineAnimations];
+        [self restartLinePathAnimationsPreservingCurrentState:YES];
     });
 }
 
