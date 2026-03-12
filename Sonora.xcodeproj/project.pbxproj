@@ -18,6 +18,13 @@
 			remoteGlobalIDString = A1B2C3D4E5F6010000000009;
 			remoteInfo = SonoraLovelyWidget;
 		};
+		B1B2C3D4E5F6010000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 91322FAE2F4A7F8C002ADCB9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 91322FB52F4A7F8C002ADCB9;
+			remoteInfo = Sonora;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -37,6 +44,7 @@
 /* Begin PBXFileReference section */
 		91322FB62F4A7F8C002ADCB9 /* Sonora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sonora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F6010000000001 /* SonoraLovelyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SonoraLovelyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1B2C3D4E5F6010000000001 /* SonoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SonoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -73,6 +81,11 @@
 			path = SonoraLovelyWidget;
 			sourceTree = "<group>";
 		};
+		B1B2C3D4E5F6010000000002 /* SonoraTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SonoraTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +103,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1B2C3D4E5F6010000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -98,6 +118,7 @@
 			children = (
 				91322FB82F4A7F8C002ADCB9 /* Sonora */,
 				A1B2C3D4E5F6010000000004 /* SonoraLovelyWidget */,
+				B1B2C3D4E5F6010000000002 /* SonoraTests */,
 				91322FB72F4A7F8C002ADCB9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -107,6 +128,7 @@
 			children = (
 				91322FB62F4A7F8C002ADCB9 /* Sonora.app */,
 				A1B2C3D4E5F6010000000001 /* SonoraLovelyWidget.appex */,
+				B1B2C3D4E5F6010000000001 /* SonoraTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -160,6 +182,29 @@
 			productReference = A1B2C3D4E5F6010000000001 /* SonoraLovelyWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		B1B2C3D4E5F6010000000006 /* SonoraTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1B2C3D4E5F601000000000B /* Build configuration list for PBXNativeTarget "SonoraTests" */;
+			buildPhases = (
+				B1B2C3D4E5F6010000000004 /* Sources */,
+				B1B2C3D4E5F6010000000003 /* Frameworks */,
+				B1B2C3D4E5F6010000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B1B2C3D4E5F6010000000008 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B1B2C3D4E5F6010000000002 /* SonoraTests */,
+			);
+			name = SonoraTests;
+			packageProductDependencies = (
+			);
+			productName = SonoraTests;
+			productReference = B1B2C3D4E5F6010000000001 /* SonoraTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -174,6 +219,10 @@
 					};
 					A1B2C3D4E5F6010000000009 = {
 						CreatedOnToolsVersion = 16.2;
+					};
+					B1B2C3D4E5F6010000000006 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 91322FB52F4A7F8C002ADCB9;
 					};
 				};
 			};
@@ -193,6 +242,7 @@
 			targets = (
 				91322FB52F4A7F8C002ADCB9 /* Sonora */,
 				A1B2C3D4E5F6010000000009 /* SonoraLovelyWidget */,
+				B1B2C3D4E5F6010000000006 /* SonoraTests */,
 			);
 		};
 /* End PBXProject section */
@@ -206,6 +256,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B2C3D4E5F6010000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1B2C3D4E5F6010000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -229,6 +286,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1B2C3D4E5F6010000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -237,6 +301,12 @@
 			platformFilter = ios;
 			target = A1B2C3D4E5F6010000000009 /* SonoraLovelyWidget */;
 			targetProxy = A1B2C3D4E5F601000000000A /* PBXContainerItemProxy */;
+		};
+		B1B2C3D4E5F6010000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 91322FB52F4A7F8C002ADCB9 /* Sonora */;
+			targetProxy = B1B2C3D4E5F6010000000007 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -471,110 +541,6 @@
 			};
 			name = Release;
 		};
-/* End XCBuildConfiguration section */
-
-/* Begin XCConfigurationList section */
-		91322FB12F4A7F8C002ADCB9 /* Build configuration list for PBXProject "Sonora" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				91322FD42F4A7F94002ADCB9 /* Debug */,
-				91322FD52F4A7F94002ADCB9 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		91322FD12F4A7F94002ADCB9 /* Build configuration list for PBXNativeTarget "Sonora" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				91322FD22F4A7F94002ADCB9 /* Debug */,
-				91322FD32F4A7F94002ADCB9 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		A1B2C3D4E5F601000000000E /* Build configuration list for PBXNativeTarget "SonoraLovelyWidget" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A1B2C3D4E5F601000000000C /* Debug */,
-				A1B2C3D4E5F601000000000D /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-/* End XCConfigurationList section */
-	};
-	rootObject = 91322FAE2F4A7F8C002ADCB9 /* Project object */;
-}
-		B1B2C3D4E5F6010000000007 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 91322FAE2F4A7F8C002ADCB9 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 91322FB52F4A7F8C002ADCB9;
-			remoteInfo = Sonora;
-		};
-		B1B2C3D4E5F6010000000001 /* SonoraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SonoraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		B1B2C3D4E5F6010000000002 /* SonoraTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SonoraTests;
-			sourceTree = "<group>";
-		};
-		B1B2C3D4E5F6010000000003 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-				B1B2C3D4E5F6010000000002 /* SonoraTests */,
-				B1B2C3D4E5F6010000000001 /* SonoraTests.xctest */,
-		B1B2C3D4E5F6010000000006 /* SonoraTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = B1B2C3D4E5F601000000000B /* Build configuration list for PBXNativeTarget "SonoraTests" */;
-			buildPhases = (
-				B1B2C3D4E5F6010000000004 /* Sources */,
-				B1B2C3D4E5F6010000000003 /* Frameworks */,
-				B1B2C3D4E5F6010000000005 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				B1B2C3D4E5F6010000000008 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				B1B2C3D4E5F6010000000002 /* SonoraTests */,
-			);
-			name = SonoraTests;
-			packageProductDependencies = (
-			);
-			productName = SonoraTests;
-			productReference = B1B2C3D4E5F6010000000001 /* SonoraTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-					B1B2C3D4E5F6010000000006 = {
-						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 91322FB52F4A7F8C002ADCB9;
-					};
-				B1B2C3D4E5F6010000000006 /* SonoraTests */,
-		B1B2C3D4E5F6010000000005 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B1B2C3D4E5F6010000000004 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B1B2C3D4E5F6010000000008 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			platformFilter = ios;
-			target = 91322FB52F4A7F8C002ADCB9 /* Sonora */;
-			targetProxy = B1B2C3D4E5F6010000000007 /* PBXContainerItemProxy */;
-		};
 		B1B2C3D4E5F6010000000009 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -635,6 +601,36 @@
 			};
 			name = Release;
 		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		91322FB12F4A7F8C002ADCB9 /* Build configuration list for PBXProject "Sonora" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91322FD42F4A7F94002ADCB9 /* Debug */,
+				91322FD52F4A7F94002ADCB9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		91322FD12F4A7F94002ADCB9 /* Build configuration list for PBXNativeTarget "Sonora" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91322FD22F4A7F94002ADCB9 /* Debug */,
+				91322FD32F4A7F94002ADCB9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4E5F601000000000E /* Build configuration list for PBXNativeTarget "SonoraLovelyWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F601000000000C /* Debug */,
+				A1B2C3D4E5F601000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B1B2C3D4E5F601000000000B /* Build configuration list for PBXNativeTarget "SonoraTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -644,3 +640,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 91322FAE2F4A7F8C002ADCB9 /* Project object */;
+}
