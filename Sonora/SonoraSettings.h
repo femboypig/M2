@@ -7,6 +7,11 @@ typedef NS_ENUM(NSInteger, SonoraMyWaveLook) {
     SonoraMyWaveLookContours = 1
 };
 
+typedef NS_ENUM(NSInteger, SonoraStreamingSearchEngine) {
+    SonoraStreamingSearchEngineSpotify = 0,
+    SonoraStreamingSearchEngineYouTube = 1
+};
+
 FOUNDATION_EXTERN NSString * _Nullable SonoraSettingsAccentHex(void);
 FOUNDATION_EXTERN NSInteger SonoraSettingsLegacyAccentColorIndex(void);
 FOUNDATION_EXTERN void SonoraSettingsStoreAccentHex(NSString *hex);
@@ -19,6 +24,9 @@ FOUNDATION_EXTERN void SonoraSettingsSetArtworkStyleIndex(NSInteger value);
 
 FOUNDATION_EXTERN SonoraMyWaveLook SonoraSettingsMyWaveLook(void);
 FOUNDATION_EXTERN void SonoraSettingsSetMyWaveLook(SonoraMyWaveLook value);
+
+FOUNDATION_EXTERN SonoraStreamingSearchEngine SonoraSettingsStreamingSearchEngine(void);
+FOUNDATION_EXTERN void SonoraSettingsSetStreamingSearchEngine(SonoraStreamingSearchEngine value);
 
 FOUNDATION_EXTERN BOOL SonoraSettingsArtworkEqualizerEnabled(void);
 FOUNDATION_EXTERN void SonoraSettingsSetArtworkEqualizerEnabled(BOOL enabled);

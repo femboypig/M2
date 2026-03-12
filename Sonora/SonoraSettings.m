@@ -11,6 +11,7 @@ static NSString * const SonoraSettingsOnlinePlaylistCacheMaxMBKey = @"sonora.set
 static NSString * const SonoraSettingsPreservePlayerModesKey = @"sonora.settings.preservePlayerModes";
 static NSString * const SonoraSettingsTrackGapKey = @"sonora.settings.trackGapSeconds";
 static NSString * const SonoraSettingsMyWaveLookKey = @"sonora.settings.myWaveLook";
+static NSString * const SonoraSettingsStreamingSearchEngineKey = @"sonora.settings.streamingSearchEngine";
 
 static NSUserDefaults *SonoraSettingsDefaults(void) {
     return NSUserDefaults.standardUserDefaults;
@@ -64,6 +65,25 @@ SonoraMyWaveLook SonoraSettingsMyWaveLook(void) {
 
 void SonoraSettingsSetMyWaveLook(SonoraMyWaveLook value) {
     [SonoraSettingsDefaults() setInteger:value forKey:SonoraSettingsMyWaveLookKey];
+}
+
+SonoraStreamingSearchEngine SonoraSettingsStreamingSearchEngine(void) {
+    NSUserDefaults *defaults = SonoraSettingsDefaults();
+    if ([defaults objectForKey:SonoraSettingsStreamingSearchEngineKey] == nil) {
+        return SonoraStreamingSearchEngineSpotify;
+    }
+    NSInteger rawValue = [defaults integerForKey:SonoraSettingsStreamingSearchEngineKey];
+    if (rawValue == SonoraStreamingSearchEngineYouTube) {
+        return SonoraStreamingSearchEngineYouTube;
+    }
+    return SonoraStreamingSearchEngineSpotify;
+}
+
+void SonoraSettingsSetStreamingSearchEngine(SonoraStreamingSearchEngine value) {
+    NSInteger rawValue = (value == SonoraStreamingSearchEngineYouTube)
+        ? SonoraStreamingSearchEngineYouTube
+        : SonoraStreamingSearchEngineSpotify;
+    [SonoraSettingsDefaults() setInteger:rawValue forKey:SonoraSettingsStreamingSearchEngineKey];
 }
 
 BOOL SonoraSettingsArtworkEqualizerEnabled(void) {

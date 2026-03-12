@@ -1206,6 +1206,73 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
     return track;
 }
 
+- (nullable SonoraTrack *)registerDownloadedTrackAtURL:(NSURL *)fileURL
+                                        preferredTitle:(NSString *)preferredTitle
+                                       preferredArtist:(NSString *)preferredArtist
+                                      preferredArtwork:(nullable UIImage *)preferredArtwork
+                                     preferredDuration:(NSTimeInterval)preferredDuration {
+    if (fileURL.path.length == 0) {
+        return nil;
+    }
+
+    NSNumber *fileSize = nil;
+    NSDate *modifiedDate = nil;
+    [fileURL getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil];
+    [fileURL getResourceValue:&modifiedDate forKey:NSURLContentModificationDateKey error:nil];
+    if (![fileSize isKindOfClass:NSNumber.class]) {
+        fileSize = @(0);
+    }
+    if (![modifiedDate isKindOfClass:NSDate.class]) {
+        modifiedDate = [NSDate dateWithTimeIntervalSince1970:0];
+    }
+
+    UIImage *embeddedArtwork = nil;
+    SonoraTrack *track = [self trackFromURL:fileURL embeddedArtworkOut:&embeddedArtwork];
+    if (track == nil) {
+        return nil;
+    }
+
+    NSString *resolvedTitle = SonoraTrimmedStringValue(preferredTitle);
+    if (resolvedTitle.length > 0) {
+        track.title = resolvedTitle;
+    }
+
+    NSString *resolvedArtist = SonoraTrimmedStringValue(preferredArtist);
+    if (resolvedArtist.length > 0) {
+        track.artist = resolvedArtist;
+    }
+
+    if (isfinite(preferredDuration) && preferredDuration > 0.0) {
+        track.duration = preferredDuration;
+    }
+
+    UIImage *artworkToStore = preferredArtwork ?: embeddedArtwork;
+    if (artworkToStore != nil) {
+        track.artwork = artworkToStore;
+    }
+
+    [self loadTrackMetadataCacheIfNeeded];
+    NSString *cacheKey = [self cacheKeyForFileURL:fileURL inMusicDirectory:[self musicDirectoryURL]];
+    NSString *artworkFileName = nil;
+    if (artworkToStore != nil && cacheKey.length > 0) {
+        artworkFileName = [self storeArtworkInCache:artworkToStore
+                                           cacheKey:cacheKey
+                                           fileSize:fileSize
+                                       modifiedDate:modifiedDate];
+    }
+    if (cacheKey.length > 0) {
+        self.trackMetadataCache[cacheKey] = [self cacheEntryForTrack:track
+                                                            fileSize:fileSize
+                                                        modifiedDate:modifiedDate
+                                                     artworkFileName:artworkFileName];
+        self.trackMetadataCacheDirty = YES;
+        [self persistTrackMetadataCacheIfNeeded];
+    }
+
+    [self reloadTracks];
+    return [self trackForIdentifier:fileURL.path];
+}
+
 - (NSString *)metadataStringForCommonKey:(AVMetadataKey)key asset:(AVAsset *)asset {
     NSArray<AVMetadataItem *> *items = [AVMetadataItem metadataItemsFromArray:asset.commonMetadata
                                                                        withKey:key

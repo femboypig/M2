@@ -36,6 +36,11 @@ typedef NS_ENUM(NSInteger, SonoraRepeatMode) {
 - (NSArray<SonoraTrack *> *)tracks;
 - (NSArray<SonoraTrack *> *)reloadTracks;
 - (nullable SonoraTrack *)trackForIdentifier:(NSString *)identifier;
+- (nullable SonoraTrack *)registerDownloadedTrackAtURL:(NSURL *)fileURL
+                                        preferredTitle:(NSString *)preferredTitle
+                                       preferredArtist:(NSString *)preferredArtist
+                                      preferredArtwork:(nullable UIImage *)preferredArtwork
+                                     preferredDuration:(NSTimeInterval)preferredDuration;
 - (BOOL)deleteTrackWithIdentifier:(NSString *)identifier error:(NSError * _Nullable * _Nullable)error;
 
 @end

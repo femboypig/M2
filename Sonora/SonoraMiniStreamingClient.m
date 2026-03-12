@@ -1,7 +1,9 @@
 #import "SonoraMiniStreamingClient.h"
+#import "SonoraSettings.h"
+#import <math.h>
 
 static NSString * const SonoraMiniStreamingDefaultBackendBaseURLString = @"https://api.corebrew.ru";
-static NSString * const SonoraMiniStreamingBackendSearchPath = @"/api/spotify/search";
+static NSString * const SonoraMiniStreamingBackendSearchPath = @"/api/search";
 static NSString * const SonoraMiniStreamingBackendDownloadPath = @"/api/download";
 static NSString * const SonoraMiniStreamingSpotifyTokenURLString = @"https://accounts.spotify.com/api/token";
 static NSString * const SonoraMiniStreamingSpotifySearchURLString = @"https://api.spotify.com/v1/search";
@@ -41,6 +43,10 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
                            userInfo:@{
                                NSLocalizedDescriptionKey: resolvedMessage
                            }];
+}
+
+static NSString *SonoraMiniStreamingCurrentEngineValue(void) {
+    return (SonoraSettingsStreamingSearchEngine() == SonoraStreamingSearchEngineYouTube) ? @"youtube" : @"spotify";
 }
 
 @implementation SonoraMiniStreamingTrack
@@ -318,12 +324,21 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
 
     NSString *trackID = SonoraTrimmedStringValue(item[@"id"]);
     if (trackID.length == 0) {
+        trackID = SonoraTrimmedStringValue(item[@"trackId"]);
+    }
+    if (trackID.length == 0) {
+        trackID = SonoraTrimmedStringValue(item[@"videoId"]);
+    }
+    if (trackID.length == 0) {
         return nil;
     }
 
     SonoraMiniStreamingTrack *track = [[SonoraMiniStreamingTrack alloc] init];
     track.trackID = trackID;
     track.title = SonoraTrimmedStringValue(item[@"name"]);
+    if (track.title.length == 0) {
+        track.title = SonoraTrimmedStringValue(item[@"title"]);
+    }
     if (track.title.length == 0) {
         track.title = @"Unknown track";
     }
@@ -339,17 +354,33 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
             [artists addObject:name];
         }
     }
+    if (artists.count == 0) {
+        NSString *artistName = SonoraTrimmedStringValue(item[@"artist"]);
+        if (artistName.length > 0) {
+            [artists addObject:artistName];
+        }
+    }
     track.artists = artists.count > 0 ? [artists componentsJoinedByString:@", "] : @"Unknown artist";
 
     NSDictionary *externalURLs = [item[@"external_urls"] isKindOfClass:NSDictionary.class] ? item[@"external_urls"] : nil;
     NSString *spotifyURL = SonoraTrimmedStringValue(externalURLs[@"spotify"]);
     if (spotifyURL.length == 0) {
-        spotifyURL = [NSString stringWithFormat:@"https://open.spotify.com/track/%@", trackID];
+        spotifyURL = SonoraTrimmedStringValue(externalURLs[@"youtube"]);
+    }
+    if (spotifyURL.length == 0) {
+        if ([SonoraMiniStreamingCurrentEngineValue() isEqualToString:@"youtube"]) {
+            spotifyURL = [NSString stringWithFormat:@"https://www.youtube.com/watch?v=%@", trackID];
+        } else {
+            spotifyURL = [NSString stringWithFormat:@"https://open.spotify.com/track/%@", trackID];
+        }
     }
     track.spotifyURL = spotifyURL;
 
     NSDictionary *albumNode = [item[@"album"] isKindOfClass:NSDictionary.class] ? item[@"album"] : nil;
     NSArray *images = [albumNode[@"images"] isKindOfClass:NSArray.class] ? albumNode[@"images"] : @[];
+    if (images.count == 0) {
+        images = [item[@"images"] isKindOfClass:NSArray.class] ? item[@"images"] : @[];
+    }
     NSString *artworkURL = @"";
     NSInteger bestWidth = -1;
     for (id imageObject in images) {
@@ -372,6 +403,12 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
     track.artworkURL = artworkURL ?: @"";
 
     NSInteger durationMS = [item[@"duration_ms"] respondsToSelector:@selector(integerValue)] ? [item[@"duration_ms"] integerValue] : 0;
+    if (durationMS <= 0) {
+        durationMS = [item[@"durationMs"] respondsToSelector:@selector(integerValue)] ? [item[@"durationMs"] integerValue] : 0;
+    }
+    if (durationMS <= 0 && [item[@"duration_seconds"] respondsToSelector:@selector(doubleValue)]) {
+        durationMS = (NSInteger)llround([item[@"duration_seconds"] doubleValue] * 1000.0);
+    }
     track.duration = durationMS > 0 ? ((NSTimeInterval)durationMS / 1000.0) : 0.0;
     return track;
 }
@@ -393,7 +430,8 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
     }
 
     NSUInteger boundedLimit = MIN(MAX(limit, (NSUInteger)1), (NSUInteger)50);
-    BOOL canUseSpotifyFallback = [self canUseSpotifyFallback];
+    BOOL useSpotifyEngine = [SonoraMiniStreamingCurrentEngineValue() isEqualToString:@"spotify"];
+    BOOL canUseSpotifyFallback = useSpotifyEngine && [self canUseSpotifyFallback];
     __weak typeof(self) weakSelf = self;
     void (^startSpotifyFallback)(void) = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -551,7 +589,8 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
     };
 
     NSURL *backendSearchURL = [self miniStreamingBackendURLForPath:SonoraMiniStreamingBackendSearchPath
-                                                         queryItems:@[
+                                                        queryItems:@[
+        [NSURLQueryItem queryItemWithName:@"engine" value:SonoraMiniStreamingCurrentEngineValue()],
         [NSURLQueryItem queryItemWithName:@"q" value:normalizedQuery],
         [NSURLQueryItem queryItemWithName:@"type" value:@"track"],
         [NSURLQueryItem queryItemWithName:@"limit" value:[NSString stringWithFormat:@"%lu", (unsigned long)boundedLimit]]
@@ -646,6 +685,13 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
 - (void)searchArtists:(NSString *)query
                 limit:(NSUInteger)limit
            completion:(SonoraMiniStreamingArtistSearchCompletion)completion {
+    if (![SonoraMiniStreamingCurrentEngineValue() isEqualToString:@"spotify"]) {
+        self.artistsSectionEnabled = NO;
+        [self dispatchOnMainQueue:^{
+            completion(@[], nil);
+        }];
+        return;
+    }
     NSString *normalizedQuery = SonoraTrimmedStringValue(query);
     if (normalizedQuery.length == 0) {
         [self dispatchOnMainQueue:^{
@@ -980,6 +1026,13 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
 - (void)fetchTopTracksForArtistID:(NSString *)artistID
                             limit:(NSUInteger)limit
                        completion:(SonoraMiniStreamingSearchCompletion)completion {
+    if (![SonoraMiniStreamingCurrentEngineValue() isEqualToString:@"spotify"]) {
+        self.artistsSectionEnabled = NO;
+        [self dispatchOnMainQueue:^{
+            completion(@[], nil);
+        }];
+        return;
+    }
     NSString *normalizedArtistID = SonoraTrimmedStringValue(artistID);
     if (normalizedArtistID.length == 0) {
         [self dispatchOnMainQueue:^{
@@ -1375,7 +1428,10 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
     }
 
     BOOL canUseRapidFallback = [self canUseRapidResolveFallback];
-    NSString *spotifyTrackURL = [NSString stringWithFormat:@"https://open.spotify.com/track/%@", normalizedTrackID];
+    NSString *currentEngine = SonoraMiniStreamingCurrentEngineValue();
+    NSString *spotifyTrackURL = [currentEngine isEqualToString:@"spotify"]
+        ? [NSString stringWithFormat:@"https://open.spotify.com/track/%@", normalizedTrackID]
+        : @"";
     __weak typeof(self) weakSelf = self;
     void (^startRapidFallback)(void) = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1495,9 +1551,12 @@ static NSError *SonoraMiniStreamingError(NSInteger code, NSString *message) {
         }];
     };
 
-    NSString *backendSpotifyTrackURL = [NSString stringWithFormat:@"https://open.spotify.com/track/%@", normalizedTrackID];
+    NSString *backendSpotifyTrackURL = [currentEngine isEqualToString:@"spotify"]
+        ? [NSString stringWithFormat:@"https://open.spotify.com/track/%@", normalizedTrackID]
+        : @"";
     NSURL *backendDownloadURL = [self miniStreamingBackendURLForPath:SonoraMiniStreamingBackendDownloadPath
                                                            queryItems:@[
+        [NSURLQueryItem queryItemWithName:@"engine" value:currentEngine],
         [NSURLQueryItem queryItemWithName:@"trackId" value:normalizedTrackID],
         [NSURLQueryItem queryItemWithName:@"trackUrl" value:backendSpotifyTrackURL]
     ]];

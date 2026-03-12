@@ -82,6 +82,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 @property (nonatomic, strong) UISwitch *artworkEqualizerSwitch;
 @property (nonatomic, strong) UISwitch *preservePlayerModesSwitch;
 @property (nonatomic, strong) UISwitch *onlinePlaylistCacheTracksSwitch;
+@property (nonatomic, strong) UILabel *streamingSearchEngineValueLabel;
 @property (nonatomic, strong) UILabel *accentColorValueLabel;
 @property (nonatomic, strong) UILabel *trackGapValueLabel;
 @property (nonatomic, strong) UILabel *usedStorageValueLabel;
@@ -189,6 +190,13 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [soundStack addArrangedSubview:[self switchRowWithTitle:@"Cover equalizer"
                                                    subtitle:@"Show animated badge on artwork while playing"
                                                     control:artworkEqualizerSwitch]];
+
+    UILabel *streamingSearchEngineValue = [self valueLabel];
+    self.streamingSearchEngineValueLabel = streamingSearchEngineValue;
+    [soundStack addArrangedSubview:[self selectableValueRowWithTitle:@"Streaming search engine"
+                                                            subtitle:@"Choose provider for online tracks"
+                                                          valueLabel:streamingSearchEngineValue
+                                                              action:@selector(selectStreamingSearchEngineTapped)]];
 
     UILabel *gapValue = [self valueLabel];
     self.trackGapValueLabel = gapValue;
@@ -524,6 +532,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     NSInteger font = SonoraSettingsFontStyleIndex();
     NSInteger artworkStyle = SonoraSettingsArtworkStyleIndex();
     NSInteger myWaveLook = SonoraSettingsMyWaveLook();
+    SonoraStreamingSearchEngine streamingSearchEngine = SonoraSettingsStreamingSearchEngine();
     BOOL artworkEqualizerEnabled = SonoraSettingsArtworkEqualizerEnabled();
     BOOL preserveModes = SonoraSettingsPreservePlayerModesEnabled();
     double trackGap = SonoraSettingsTrackGapSeconds();
@@ -538,6 +547,11 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     if (myWaveLook != SonoraMyWaveLookClouds && myWaveLook != SonoraMyWaveLookContours) {
         myWaveLook = SonoraMyWaveLookContours;
         SonoraSettingsSetMyWaveLook(myWaveLook);
+    }
+    if (streamingSearchEngine != SonoraStreamingSearchEngineSpotify &&
+        streamingSearchEngine != SonoraStreamingSearchEngineYouTube) {
+        streamingSearchEngine = SonoraStreamingSearchEngineSpotify;
+        SonoraSettingsSetStreamingSearchEngine(streamingSearchEngine);
     }
     self.fontControl.selectedSegmentIndex = MAX(0, MIN(1, font));
     self.artworkStyleControl.selectedSegmentIndex = MAX(0, MIN(1, artworkStyle));
@@ -556,6 +570,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [self refreshMaxStorageLabel];
     [self refreshOnlinePlaylistCacheUsageLabel];
     [self refreshOnlinePlaylistCacheLabel];
+    [self refreshStreamingSearchEngineLabel];
     [self refreshAccentColorLabel];
 }
 
@@ -629,6 +644,11 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     self.accentColorValueLabel.text = [self hexStringForColor:[self currentAccentColor]];
 }
 
+- (void)refreshStreamingSearchEngineLabel {
+    SonoraStreamingSearchEngine engine = SonoraSettingsStreamingSearchEngine();
+    self.streamingSearchEngineValueLabel.text = (engine == SonoraStreamingSearchEngineYouTube) ? @"YouTube" : @"Spotify";
+}
+
 - (void)selectAccentColorTapped {
     if (@available(iOS 14.0, *)) {
         UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
@@ -665,6 +685,31 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 - (void)artworkEqualizerChanged:(UISwitch *)sender {
     SonoraSettingsSetArtworkEqualizerEnabled(sender.isOn);
     [self notifyPlayerSettingsChanged];
+}
+
+- (void)selectStreamingSearchEngineTapped {
+    SonoraStreamingSearchEngine current = SonoraSettingsStreamingSearchEngine();
+    NSString *currentLabel = (current == SonoraStreamingSearchEngineYouTube) ? @"YouTube" : @"Spotify";
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Streaming search engine"
+                                                                   message:[NSString stringWithFormat:@"Current: %@", currentLabel]
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Spotify"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        SonoraSettingsSetStreamingSearchEngine(SonoraStreamingSearchEngineSpotify);
+        [self refreshStreamingSearchEngineLabel];
+        [self notifyPlayerSettingsChanged];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"YouTube"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        SonoraSettingsSetStreamingSearchEngine(SonoraStreamingSearchEngineYouTube);
+        [self refreshStreamingSearchEngineLabel];
+        [self notifyPlayerSettingsChanged];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [self configurePopoverForSheet:sheet];
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)selectTrackGapTapped {
@@ -1117,6 +1162,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     return @{
         @"fontStyle": (SonoraSettingsFontStyleIndex() == 1 ? @"serif" : @"system"),
         @"artworkStyle": (SonoraSettingsArtworkStyleIndex() == 0 ? @"square" : @"rounded"),
+        @"streamingSearchEngine": (SonoraSettingsStreamingSearchEngine() == SonoraStreamingSearchEngineYouTube ? @"youtube" : @"spotify"),
         @"accentHex": [self hexStringForColor:[self currentAccentColor]],
         @"preservePlayerModes": @(SonoraSettingsPreservePlayerModesEnabled()),
         @"trackGapSeconds": @(SonoraSettingsTrackGapSeconds()),
@@ -1149,6 +1195,18 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
         artworkIndex = [artworkStyleValue integerValue];
     }
     SonoraSettingsSetArtworkStyleIndex(MAX(0, MIN(1, artworkIndex)));
+
+    id streamingSearchEngineValue = settings[@"streamingSearchEngine"];
+    SonoraStreamingSearchEngine engine = SonoraStreamingSearchEngineSpotify;
+    if ([streamingSearchEngineValue isKindOfClass:NSString.class]) {
+        NSString *normalizedEngine = [((NSString *)streamingSearchEngineValue) lowercaseString];
+        engine = [normalizedEngine isEqualToString:@"youtube"] ? SonoraStreamingSearchEngineYouTube : SonoraStreamingSearchEngineSpotify;
+    } else if ([streamingSearchEngineValue respondsToSelector:@selector(integerValue)]) {
+        engine = ([streamingSearchEngineValue integerValue] == SonoraStreamingSearchEngineYouTube)
+            ? SonoraStreamingSearchEngineYouTube
+            : SonoraStreamingSearchEngineSpotify;
+    }
+    SonoraSettingsSetStreamingSearchEngine(engine);
 
     id accentValue = settings[@"accentHex"];
     if ([accentValue isKindOfClass:NSString.class] && ((NSString *)accentValue).length > 0) {

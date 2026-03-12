@@ -2258,12 +2258,51 @@ typedef NS_ENUM(NSInteger, SonoraSearchSectionType) {
             return;
         }
 
+        SonoraMiniStreamingTrack *resolvedMiniTrack = [strongSelf miniStreamingTrackFromPlaybackQueueByTrackID:trackID];
+        NSString *preferredTitle = SonoraTrimmedStringValue(resolvedMiniTrack.title);
+        if (preferredTitle.length == 0) {
+            preferredTitle = SonoraTrimmedStringValue(payload[@"title"]);
+        }
+        NSString *preferredArtist = SonoraTrimmedStringValue(resolvedMiniTrack.artists);
+        if (preferredArtist.length == 0) {
+            preferredArtist = SonoraTrimmedStringValue(payload[@"artist"]);
+        }
+        NSTimeInterval preferredDuration = resolvedMiniTrack.duration > 0.0
+            ? resolvedMiniTrack.duration
+            : ([payload[@"duration"] respondsToSelector:@selector(doubleValue)] ? [payload[@"duration"] doubleValue] : 0.0);
+
+        NSString *artworkURLString = SonoraTrimmedStringValue(resolvedMiniTrack.artworkURL);
+        if (artworkURLString.length == 0) {
+            artworkURLString = SonoraTrimmedStringValue(payload[@"artworkURL"]);
+        }
+        UIImage *preferredArtwork = nil;
+        if (artworkURLString.length > 0) {
+            NSURL *artworkURL = [NSURL URLWithString:artworkURLString];
+            if (artworkURL == nil) {
+                NSString *encodedArtworkURLString = [artworkURLString stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLFragmentAllowedCharacterSet];
+                artworkURL = [NSURL URLWithString:encodedArtworkURLString];
+            }
+            if (artworkURL != nil) {
+                NSData *artworkData = [NSData dataWithContentsOfURL:artworkURL];
+                if (artworkData.length > 0) {
+                    preferredArtwork = [UIImage imageWithData:artworkData];
+                }
+            }
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             cleanup();
             SonoraDiagnosticsLog(@"mini-streaming", [NSString stringWithFormat:@"download_completed track=%@ path=%@",
                                                      trackID,
                                                      destinationURL.path ?: @""]);
-            [strongSelf reloadTracks];
+            SonoraTrack *registeredTrack = [SonoraLibraryManager.sharedManager registerDownloadedTrackAtURL:destinationURL
+                                                                                            preferredTitle:preferredTitle
+                                                                                           preferredArtist:preferredArtist
+                                                                                          preferredArtwork:preferredArtwork
+                                                                                         preferredDuration:preferredDuration];
+            if (registeredTrack == nil) {
+                [strongSelf reloadTracks];
+            }
             [strongSelf syncMiniStreamingPlaybackWithInstalledTrackAtURL:destinationURL
                                                                  trackID:trackID];
         });
