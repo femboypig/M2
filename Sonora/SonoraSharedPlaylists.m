@@ -567,6 +567,7 @@ void SonoraSharedPlaylistWarmPersistentCache(SonoraSharedPlaylistSnapshot *snaps
         }];
 
         __block void (^runStepAtIndex)(NSUInteger);
+        __weak void (^weakRunStepAtIndex)(NSUInteger);
         runStepAtIndex = ^(NSUInteger index) {
             if (index >= steps.count) {
                 if (didPersistUpdates) {
@@ -583,9 +584,13 @@ void SonoraSharedPlaylistWarmPersistentCache(SonoraSharedPlaylistSnapshot *snaps
             }
             SonoraSharedPlaylistWarmStep step = steps[index];
             step(^{
-                runStepAtIndex(index + 1);
+                void (^strongRunStepAtIndex)(NSUInteger) = weakRunStepAtIndex;
+                if (strongRunStepAtIndex != nil) {
+                    strongRunStepAtIndex(index + 1);
+                }
             });
         };
+        weakRunStepAtIndex = runStepAtIndex;
         runStepAtIndex(0);
     });
 }
