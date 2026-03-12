@@ -181,6 +181,13 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
                                                                    valueLabel:accentColorValue
                                                                        action:@selector(selectAccentColorTapped)]];
 
+    UILabel *streamingSearchEngineValue = [self valueLabel];
+    self.streamingSearchEngineValueLabel = streamingSearchEngineValue;
+    [customizationStack addArrangedSubview:[self selectableValueRowWithTitle:@"Streaming search engine"
+                                                                    subtitle:@"Choose provider for online tracks"
+                                                                  valueLabel:streamingSearchEngineValue
+                                                                      action:@selector(selectStreamingSearchEngineTapped)]];
+
     [contentStack addArrangedSubview:[self sectionHeadingWithText:@"Sound"]];
     UIStackView *soundStack = [self addSectionCardToStack:contentStack];
 
@@ -190,13 +197,6 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [soundStack addArrangedSubview:[self switchRowWithTitle:@"Cover equalizer"
                                                    subtitle:@"Show animated badge on artwork while playing"
                                                     control:artworkEqualizerSwitch]];
-
-    UILabel *streamingSearchEngineValue = [self valueLabel];
-    self.streamingSearchEngineValueLabel = streamingSearchEngineValue;
-    [soundStack addArrangedSubview:[self selectableValueRowWithTitle:@"Streaming search engine"
-                                                            subtitle:@"Choose provider for online tracks"
-                                                          valueLabel:streamingSearchEngineValue
-                                                              action:@selector(selectStreamingSearchEngineTapped)]];
 
     UILabel *gapValue = [self valueLabel];
     self.trackGapValueLabel = gapValue;
