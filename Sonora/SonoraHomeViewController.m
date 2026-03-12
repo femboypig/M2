@@ -1003,17 +1003,18 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
         line.path = startingPath;
 
         CAKeyframeAnimation *pathAnim = [CAKeyframeAnimation animationWithKeyPath:@"path"];
+        id loopReturnPath = preserveCurrentState ? (__bridge id)startingPath : (__bridge id)path0.CGPath;
         pathAnim.values = @[
             (__bridge id)startingPath,
             (__bridge id)path1.CGPath,
             (__bridge id)path2.CGPath,
-            (__bridge id)path0.CGPath
+            loopReturnPath
         ];
         pathAnim.keyTimes = @[@0.0, @0.34, @0.68, @1.0];
         pathAnim.duration = (8.4 + (((CGFloat)idx) * 0.85f)) * durationMultiplier;
         pathAnim.repeatCount = HUGE_VALF;
         pathAnim.calculationMode = kCAAnimationLinear;
-        pathAnim.beginTime = CACurrentMediaTime() + (((CGFloat)idx) * 0.08f);
+        pathAnim.beginTime = CACurrentMediaTime() + (preserveCurrentState ? 0.0 : (((CGFloat)idx) * 0.08f));
         pathAnim.timingFunctions = @[
             [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut],
             [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut],
@@ -1050,16 +1051,17 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
         line.transform = SonoraWaveTransform(currentScale, currentRotation);
 
         CAKeyframeAnimation *opacityAnim = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+        NSNumber *loopReturnOpacity = preserveCurrentState ? @(currentOpacity) : @(baseOpacity - (swing * 0.35f));
         opacityAnim.values = @[
             @(currentOpacity),
             @(baseOpacity + swing),
             @(baseOpacity - (swing * 0.18f)),
-            @(baseOpacity - (swing * 0.35f))
+            loopReturnOpacity
         ];
         opacityAnim.keyTimes = @[@0.0, @0.32, @0.70, @1.0];
         opacityAnim.duration = (4.8 + (((CGFloat)idx) * 0.50)) * durationMultiplier;
         opacityAnim.repeatCount = HUGE_VALF;
-        opacityAnim.beginTime = CACurrentMediaTime() + (((CGFloat)idx) * 0.08f);
+        opacityAnim.beginTime = CACurrentMediaTime() + (preserveCurrentState ? 0.0 : (((CGFloat)idx) * 0.08f));
         opacityAnim.timingFunctions = @[
             [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut],
             [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut],
@@ -1074,7 +1076,7 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
             scaleAnim.duration = 7.4 + (((CGFloat)idx) * 0.70f);
             scaleAnim.autoreverses = YES;
             scaleAnim.repeatCount = HUGE_VALF;
-            scaleAnim.beginTime = CACurrentMediaTime() + (((CGFloat)idx) * 0.06f);
+            scaleAnim.beginTime = CACurrentMediaTime() + (preserveCurrentState ? 0.0 : (((CGFloat)idx) * 0.06f));
             scaleAnim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
             [line addAnimation:scaleAnim forKey:@"sonora_wave_line_scale"];
 
@@ -1085,7 +1087,7 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
             rotationAnim.duration = 12.2 + (((CGFloat)idx) * 0.80f);
             rotationAnim.autoreverses = YES;
             rotationAnim.repeatCount = HUGE_VALF;
-            rotationAnim.beginTime = CACurrentMediaTime() + (((CGFloat)idx) * 0.05f);
+            rotationAnim.beginTime = CACurrentMediaTime() + (preserveCurrentState ? 0.0 : (((CGFloat)idx) * 0.05f));
             rotationAnim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
             [line addAnimation:rotationAnim forKey:@"sonora_wave_line_rotation"];
 
@@ -1095,7 +1097,7 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
             shadowAnim.duration = 5.6 + (((CGFloat)idx) * 0.55f);
             shadowAnim.autoreverses = YES;
             shadowAnim.repeatCount = HUGE_VALF;
-            shadowAnim.beginTime = CACurrentMediaTime() + (((CGFloat)idx) * 0.04f);
+            shadowAnim.beginTime = CACurrentMediaTime() + (preserveCurrentState ? 0.0 : (((CGFloat)idx) * 0.04f));
             shadowAnim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
             [line addAnimation:shadowAnim forKey:@"sonora_wave_line_shadow"];
         }
@@ -1213,7 +1215,6 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
     if (isMissingGlowAnimations) {
         [self restartGlowAnimationsPreservingCurrentState:YES];
     }
-    [self updatePlaybackStateAnimated:NO];
 }
 
 - (void)transitionToUpdatedGeometry {
@@ -4579,9 +4580,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     preserveWaveProgress &&
     displayTrack.identifier.length > 0 &&
     [cell.configuredTrackIdentifier isEqualToString:displayTrack.identifier];
-    if (shouldPreserveConfiguredWave) {
-        [cell resumeWaveAnimationsIfNeeded];
-    } else {
+    if (!shouldPreserveConfiguredWave) {
         [cell configureWithTrack:displayTrack];
     }
     cell.playing = isWaveQueue && SonoraPlaybackManager.sharedManager.isPlaying;
