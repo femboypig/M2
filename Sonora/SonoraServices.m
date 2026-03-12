@@ -51,6 +51,76 @@ static NSString *SonoraServicesTrimmedStringValue(id value) {
     NSString *trimmed = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     return trimmed ?: @"";
 }
+
+static AVMutableMetadataItem *SonoraID3StringMetadataItem(AVMetadataIdentifier identifier, NSString *value) {
+    NSString *trimmedValue = SonoraServicesTrimmedStringValue(value);
+    if (trimmedValue.length == 0) {
+        return nil;
+    }
+
+    AVMutableMetadataItem *item = [[AVMutableMetadataItem alloc] init];
+    item.identifier = identifier;
+    item.value = trimmedValue;
+    return item;
+}
+
+static AVMutableMetadataItem *SonoraID3ArtworkMetadataItem(UIImage *artwork) {
+    if (artwork == nil) {
+        return nil;
+    }
+
+    NSData *imageData = UIImageJPEGRepresentation(artwork, 0.94);
+    NSString *dataType = (__bridge NSString *)kCMMetadataBaseDataType_JPEG;
+    if (imageData.length == 0) {
+        imageData = UIImagePNGRepresentation(artwork);
+        dataType = (__bridge NSString *)kCMMetadataBaseDataType_PNG;
+    }
+    if (imageData.length == 0) {
+        return nil;
+    }
+
+    AVMutableMetadataItem *item = [[AVMutableMetadataItem alloc] init];
+    item.identifier = AVMetadataIdentifierID3MetadataAttachedPicture;
+    item.dataType = dataType;
+    item.value = imageData;
+    return item;
+}
+
+static NSArray<AVMetadataItem *> *SonoraMergedID3Metadata(NSArray<AVMetadataItem *> *existingMetadata,
+                                                          NSString *title,
+                                                          NSString *artist,
+                                                          UIImage *artwork) {
+    NSMutableArray<AVMetadataItem *> *merged = [[NSMutableArray alloc] init];
+    NSSet<AVMetadataIdentifier> *replacedIdentifiers = [NSSet setWithArray:@[
+        AVMetadataIdentifierID3MetadataTitleDescription,
+        AVMetadataIdentifierID3MetadataLeadPerformer,
+        AVMetadataIdentifierID3MetadataAttachedPicture
+    ]];
+
+    for (AVMetadataItem *item in existingMetadata) {
+        if ([replacedIdentifiers containsObject:item.identifier]) {
+            continue;
+        }
+        [merged addObject:item];
+    }
+
+    AVMutableMetadataItem *titleItem = SonoraID3StringMetadataItem(AVMetadataIdentifierID3MetadataTitleDescription, title);
+    if (titleItem != nil) {
+        [merged addObject:titleItem];
+    }
+
+    AVMutableMetadataItem *artistItem = SonoraID3StringMetadataItem(AVMetadataIdentifierID3MetadataLeadPerformer, artist);
+    if (artistItem != nil) {
+        [merged addObject:artistItem];
+    }
+
+    AVMutableMetadataItem *artworkItem = SonoraID3ArtworkMetadataItem(artwork);
+    if (artworkItem != nil) {
+        [merged addObject:artworkItem];
+    }
+
+    return merged;
+}
 static NSString * const kDiagnosticsDirectoryName = @"SonoraDiagnostics";
 static NSString * const kDiagnosticsLogFileName = @"runtime.log";
 static NSString * const kDiagnosticsLogFileBackupName = @"runtime-prev.log";
@@ -1279,6 +1349,73 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
 
     [self reloadTracks];
     return [self trackForIdentifier:fileURL.path];
+}
+
+- (void)rewriteDownloadedMP3MetadataAtURL:(NSURL *)fileURL
+                           preferredTitle:(NSString *)preferredTitle
+                          preferredArtist:(NSString *)preferredArtist
+                         preferredArtwork:(nullable UIImage *)preferredArtwork
+                               completion:(void (^ _Nullable)(BOOL success))completion {
+    void (^finish)(BOOL) = ^(BOOL success) {
+        if (completion == nil) {
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(success);
+        });
+    };
+
+    if (fileURL == nil || ![fileURL.pathExtension.lowercaseString isEqualToString:@"mp3"]) {
+        finish(NO);
+        return;
+    }
+
+    NSString *resolvedTitle = SonoraServicesTrimmedStringValue(preferredTitle);
+    NSString *resolvedArtist = SonoraServicesTrimmedStringValue(preferredArtist);
+    if (resolvedTitle.length == 0 && resolvedArtist.length == 0 && preferredArtwork == nil) {
+        finish(NO);
+        return;
+    }
+
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:fileURL options:nil];
+    AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset
+                                                                           presetName:AVAssetExportPresetPassthrough];
+    if (exportSession == nil || ![exportSession.supportedFileTypes containsObject:AVFileTypeMPEGLayer3]) {
+        finish(NO);
+        return;
+    }
+
+    NSString *temporaryFileName = [NSString stringWithFormat:@"%@.retag.%@",
+                                   fileURL.lastPathComponent.stringByDeletingPathExtension,
+                                   fileURL.pathExtension ?: @"mp3"];
+    NSURL *temporaryURL = [[fileURL URLByDeletingLastPathComponent] URLByAppendingPathComponent:temporaryFileName];
+    [NSFileManager.defaultManager removeItemAtURL:temporaryURL error:nil];
+
+    exportSession.outputURL = temporaryURL;
+    exportSession.outputFileType = AVFileTypeMPEGLayer3;
+    exportSession.metadata = SonoraMergedID3Metadata(asset.metadata, resolvedTitle, resolvedArtist, preferredArtwork);
+    [exportSession exportAsynchronouslyWithCompletionHandler:^{
+        if (exportSession.status != AVAssetExportSessionStatusCompleted) {
+            [NSFileManager.defaultManager removeItemAtURL:temporaryURL error:nil];
+            finish(NO);
+            return;
+        }
+
+        NSError *replaceError = nil;
+        NSURL *resultURL = [NSFileManager.defaultManager replaceItemAtURL:fileURL
+                                                            withItemAtURL:temporaryURL
+                                                           backupItemName:nil
+                                                                  options:0
+                                                         resultingItemURL:nil
+                                                                    error:&replaceError];
+        if (resultURL == nil || replaceError != nil) {
+            [NSFileManager.defaultManager removeItemAtURL:temporaryURL error:nil];
+            finish(NO);
+            return;
+        }
+
+        finish(YES);
+    }];
 }
 
 - (NSString *)metadataStringForCommonKey:(AVMetadataKey)key asset:(AVAsset *)asset {

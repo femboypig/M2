@@ -2290,22 +2290,38 @@ typedef NS_ENUM(NSInteger, SonoraSearchSectionType) {
             }
         }
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            cleanup();
-            SonoraDiagnosticsLog(@"mini-streaming", [NSString stringWithFormat:@"download_completed track=%@ path=%@",
-                                                     trackID,
-                                                     destinationURL.path ?: @""]);
-            SonoraTrack *registeredTrack = [SonoraLibraryManager.sharedManager registerDownloadedTrackAtURL:destinationURL
-                                                                                            preferredTitle:preferredTitle
-                                                                                           preferredArtist:preferredArtist
-                                                                                          preferredArtwork:preferredArtwork
-                                                                                         preferredDuration:preferredDuration];
-            if (registeredTrack == nil) {
-                [strongSelf reloadTracks];
-            }
-            [strongSelf syncMiniStreamingPlaybackWithInstalledTrackAtURL:destinationURL
-                                                                 trackID:trackID];
-        });
+        BOOL shouldRewriteMP3Metadata = (SonoraSettingsStreamingSearchEngine() == SonoraStreamingSearchEngineYouTube &&
+                                         [resolvedExtension.lowercaseString isEqualToString:@"mp3"]);
+        void (^finalizeInstall)(void) = ^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                cleanup();
+                SonoraDiagnosticsLog(@"mini-streaming", [NSString stringWithFormat:@"download_completed track=%@ path=%@",
+                                                         trackID,
+                                                         destinationURL.path ?: @""]);
+                SonoraTrack *registeredTrack = [SonoraLibraryManager.sharedManager registerDownloadedTrackAtURL:destinationURL
+                                                                                                preferredTitle:preferredTitle
+                                                                                               preferredArtist:preferredArtist
+                                                                                              preferredArtwork:preferredArtwork
+                                                                                             preferredDuration:preferredDuration];
+                if (registeredTrack == nil) {
+                    [strongSelf reloadTracks];
+                }
+                [strongSelf syncMiniStreamingPlaybackWithInstalledTrackAtURL:destinationURL
+                                                                     trackID:trackID];
+            });
+        };
+
+        if (shouldRewriteMP3Metadata) {
+            [SonoraLibraryManager.sharedManager rewriteDownloadedMP3MetadataAtURL:destinationURL
+                                                                   preferredTitle:preferredTitle
+                                                                  preferredArtist:preferredArtist
+                                                                 preferredArtwork:preferredArtwork
+                                                                       completion:^(__unused BOOL success) {
+                finalizeInstall();
+            }];
+        } else {
+            finalizeInstall();
+        }
     }];
     downloadTask.priority = NSURLSessionTaskPriorityLow;
     self.miniStreamingDownloadTasksByTrackID[trackID] = downloadTask;
