@@ -12,6 +12,7 @@
 #import "SonoraCells.h"
 #import "SonoraHistoryViewController.h"
 #import "SonoraSettingsBackupArchiveService.h"
+#import "SonoraSharedPlaylists.h"
 #import "SonoraServices.h"
 
 static NSString * const SonoraHomeRecommendationCellReuseID = @"SonoraHomeRecommendationCell";
@@ -3223,16 +3224,8 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
 }
 
 - (void)refreshSharedPlaylistAudioCacheIfNeeded {
-    Class sharedPlaylistStoreClass = NSClassFromString(@"SonoraSharedPlaylistStore");
-    if (sharedPlaylistStoreClass == Nil) {
-        return;
-    }
-    id sharedPlaylistStore = [sharedPlaylistStoreClass performSelector:@selector(sharedStore)];
-    if (![sharedPlaylistStore respondsToSelector:@selector(refreshAllPersistentCachesIfNeeded)]) {
-        return;
-    }
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        [sharedPlaylistStore performSelector:@selector(refreshAllPersistentCachesIfNeeded)];
+        [SonoraSharedPlaylistStore.sharedStore refreshAllPersistentCachesIfNeeded];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self refreshOnlinePlaylistCacheUsageLabel];
         });

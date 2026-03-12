@@ -7,6 +7,7 @@
 
 #import <objc/message.h>
 
+#import "SonoraSharedPlaylists.h"
 #import "SonoraServices.h"
 
 static NSString * const SonoraCollectionsPlaylistCellReuseID = @"SonoraCollectionsPlaylistCell";
@@ -26,29 +27,19 @@ typedef NS_ENUM(NSInteger, SonoraCollectionsSection) {
     SonoraCollectionsSectionMyMusic = 5,
 };
 
-static id SonoraCollectionsSharedPlaylistStore(void) {
-    Class storeClass = NSClassFromString(@"SonoraSharedPlaylistStore");
-    if (storeClass == Nil) {
-        return nil;
-    }
-    return [storeClass performSelector:@selector(sharedStore)];
+static SonoraSharedPlaylistStore *SonoraCollectionsSharedPlaylistStore(void) {
+    return SonoraSharedPlaylistStore.sharedStore;
 }
 
 static NSArray<SonoraPlaylist *> *SonoraCollectionsLikedSharedPlaylists(void) {
-    id store = SonoraCollectionsSharedPlaylistStore();
-    if (![store respondsToSelector:@selector(likedPlaylists)]) {
-        return @[];
-    }
-    id playlists = [store performSelector:@selector(likedPlaylists)];
-    return [playlists isKindOfClass:NSArray.class] ? playlists : @[];
+    return [SonoraCollectionsSharedPlaylistStore() likedPlaylists] ?: @[];
 }
 
-static id SonoraCollectionsSharedSnapshotForPlaylistID(NSString *playlistID) {
-    id store = SonoraCollectionsSharedPlaylistStore();
-    if (playlistID.length == 0 || ![store respondsToSelector:@selector(snapshotForPlaylistID:)]) {
+static SonoraSharedPlaylistSnapshot *SonoraCollectionsSharedSnapshotForPlaylistID(NSString *playlistID) {
+    if (playlistID.length == 0) {
         return nil;
     }
-    return [store performSelector:@selector(snapshotForPlaylistID:) withObject:playlistID];
+    return [SonoraCollectionsSharedPlaylistStore() snapshotForPlaylistID:playlistID];
 }
 
 static NSString *SonoraCollectionsSharedPlaylistSubtitle(id sharedSnapshot) {
