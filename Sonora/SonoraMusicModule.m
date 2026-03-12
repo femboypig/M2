@@ -641,9 +641,9 @@ static NSArray<NSString *> *SonoraArtistParticipantsFromText(NSString *artistTex
     return values;
 }
 
-static NSArray<NSDictionary<NSString *, id> *> *SonoraBuildArtistSearchResults(NSArray<SonoraTrack *> *tracks,
-                                                                            NSString *query,
-                                                                            NSUInteger limit) {
+static __attribute__((unused)) NSArray<NSDictionary<NSString *, id> *> *SonoraBuildArtistSearchResults(NSArray<SonoraTrack *> *tracks,
+                                                                                                        NSString *query,
+                                                                                                        NSUInteger limit) {
     NSString *normalizedQuery = SonoraNormalizedSearchText(query);
     if (tracks.count == 0 || limit == 0) {
         return @[];
@@ -2102,6 +2102,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
             return;
         }
 
+            __weak void (^weakAttemptCandidateAtIndex)(NSUInteger) = nil;
         [strongSelf fetchBrokerCredentialWithCompletion:^(NSString * _Nullable brokerHost, NSString * _Nullable brokerKey) {
             __strong typeof(weakSelf) innerSelf = weakSelf;
             if (innerSelf == nil) {
@@ -2138,7 +2139,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                 NSString *requestHost = SonoraTrimmedStringValue(candidate[@"host"]);
                 NSString *requestKey = SonoraTrimmedStringValue(candidate[@"key"]);
                 if (requestURL == nil || requestHost.length == 0 || requestKey.length == 0) {
-                    attemptCandidateAtIndex(index + 1);
+                    weakAttemptCandidateAtIndex(index + 1);
                     return;
                 }
 
@@ -2163,7 +2164,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                         if (message.length > 0) {
                             lastMessage = message;
                         }
-                        attemptCandidateAtIndex(index + 1);
+                        weakAttemptCandidateAtIndex(index + 1);
                         return;
                     }
 
@@ -2188,6 +2189,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                     NSString *message = SonoraTrimmedStringValue(json[@"message"]);
                     if (message.length == 0) {
                         message = SonoraTrimmedStringValue(json[@"error"]);
+            weakAttemptCandidateAtIndex = attemptCandidateAtIndex;
                     }
                     if (statusCode == 451) {
                         message = @"Требуется VPN из-за региональных ограничений (451).";
@@ -2203,7 +2205,7 @@ typedef void (^SonoraMiniStreamingResolveCompletion)(NSDictionary<NSString *, id
                             [innerSelf markRapidAPIKeyBlockedForQuotaIfNeeded:requestKey];
                         }
                     }
-                    attemptCandidateAtIndex(index + 1);
+                    weakAttemptCandidateAtIndex(index + 1);
                 }];
                 [task resume];
             };
@@ -4928,6 +4930,8 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
     });
 }
 
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[audioType]
+                                                                                                          asCopy:YES];
 - (void)stopMiniStreamingPlaceholderIfNeededForTrackID:(NSString *)trackID {
     if (trackID.length == 0) {
         return;
@@ -5112,16 +5116,9 @@ static NSString * const SonoraMusicSearchHeaderReuseID = @"SonoraMusicSearchHead
         [self presentStorageLimitReachedAlert];
         return;
     }
-    UIDocumentPickerViewController *picker = nil;
-    if (@available(iOS 14.0, *)) {
-        UTType *audioType = [UTType typeWithIdentifier:@"public.audio"];
-        if (audioType != nil) {
-            picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[audioType] asCopy:YES];
-        }
-    }
-    if (picker == nil) {
-        picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.audio"]
-                                                                        inMode:UIDocumentPickerModeImport];
+    UTType *audioType = [UTType typeWithIdentifier:@"public.audio"];
+    if (audioType == nil) {
+        audioType = UTTypeAudio;
     }
     picker.delegate = self;
     picker.allowsMultipleSelection = YES;
@@ -7703,7 +7700,6 @@ replacementString:(NSString *)string {
     }
 
     self.sharedCoverLoading = YES;
-    __weak typeof(self) weakSelf = self;
     NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:url
                                                             completionHandler:^(NSData * _Nullable data,
                                                                                 NSURLResponse * _Nullable response,

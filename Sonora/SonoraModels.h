@@ -16,7 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *fileName;
 @property (nonatomic, strong) NSURL *url;
 @property (nonatomic, assign) NSTimeInterval duration;
-@property (nonatomic, strong) UIImage *artwork;
+@property (nonatomic, strong, nullable) UIImage *artwork;
 
 @end
 

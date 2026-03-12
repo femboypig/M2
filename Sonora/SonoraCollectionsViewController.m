@@ -830,7 +830,7 @@ static NSArray<NSString *> *SonoraCollectionsArtistParticipants(NSString *artist
     NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:304.0]
                                                                         heightDimension:[NSCollectionLayoutDimension absoluteDimension:140.0]];
     NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize
-                                                                                    subitem:item
+                                                                         repeatingSubitem:item
                                                                                       count:2];
     group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:8.0];
 
@@ -899,7 +899,7 @@ static NSArray<NSString *> *SonoraCollectionsArtistParticipants(NSString *artist
     NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:304.0]
                                                                         heightDimension:[NSCollectionLayoutDimension absoluteDimension:140.0]];
     NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize
-                                                                                    subitem:item
+                                                                         repeatingSubitem:item
                                                                                       count:2];
     group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:8.0];
 

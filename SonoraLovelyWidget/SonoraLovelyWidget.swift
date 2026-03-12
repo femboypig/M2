@@ -30,7 +30,7 @@ enum SonoraWidgetSongSource: String {
     }
 }
 
-@available(iOSApplicationExtension 17.0, *)
+@available(iOS 17.0, *)
 extension SonoraWidgetSongSource: AppEnum {
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "Song Source")
@@ -44,17 +44,13 @@ extension SonoraWidgetSongSource: AppEnum {
     }
 }
 
-@available(iOSApplicationExtension 17.0, *)
+@available(iOS 17.0, *)
 struct SonoraWidgetConfigurationIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource { "Sonora Widget" }
     static var description: IntentDescription { IntentDescription("Choose whether the widget shows lovely songs or random songs.") }
 
-    @Parameter(title: "Show")
-    var source: SonoraWidgetSongSource?
-
-    init() {
-        self.source = .lovely
-    }
+    @Parameter(title: "Show", default: .lovely)
+    var source: SonoraWidgetSongSource
 }
 
 private struct LovelyTrack: Hashable {
@@ -165,7 +161,7 @@ private enum LovelyEntryFactory {
     }
 }
 
-@available(iOSApplicationExtension 17.0, *)
+@available(iOS 17.0, *)
 private struct LovelyIntentProvider: AppIntentTimelineProvider {
     typealias Intent = SonoraWidgetConfigurationIntent
 
@@ -180,12 +176,12 @@ private struct LovelyIntentProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: SonoraWidgetConfigurationIntent, in context: Context) async -> LovelyEntry {
-        LovelyEntryFactory.makeEntry(for: Date(), source: configuration.source ?? .lovely, preview: context.isPreview)
+        LovelyEntryFactory.makeEntry(for: Date(), source: configuration.source, preview: context.isPreview)
     }
 
     func timeline(for configuration: SonoraWidgetConfigurationIntent, in context: Context) async -> Timeline<LovelyEntry> {
         let now = Date()
-        let source = configuration.source ?? .lovely
+        let source = configuration.source
         var entries: [LovelyEntry] = []
 
         for step in 0..<8 {
@@ -338,7 +334,7 @@ private struct LovelyWidgetView: View {
     }
 }
 
-@available(iOSApplicationExtension 17.0, *)
+@available(iOS 17.0, *)
 struct SonoraLovelyWidget: Widget {
     private let kind = "SonoraLovelyWidget"
 

@@ -8,6 +8,7 @@
 #import <limits.h>
 #import <math.h>
 #import <QuartzCore/QuartzCore.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #import "SonoraCells.h"
 #import "SonoraHistoryViewController.h"
@@ -1636,9 +1637,15 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     playButton.titleLabel.adjustsFontSizeToFitWidth = NO;
     playButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
     playButton.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
-    playButton.contentEdgeInsets = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0);
-    playButton.imageEdgeInsets = UIEdgeInsetsMake(0.0, 0.0, 0.0, 6.0);
-    playButton.titleEdgeInsets = UIEdgeInsetsMake(0.0, 4.0, 0.0, 0.0);
+    UIButtonConfiguration *playButtonConfiguration = [UIButtonConfiguration plainButtonConfiguration];
+    playButtonConfiguration.contentInsets = NSDirectionalEdgeInsetsZero;
+    playButtonConfiguration.imagePadding = 10.0;
+    playButtonConfiguration.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey,id> * _Nonnull(NSDictionary<NSAttributedStringKey,id> * _Nonnull incoming) {
+        NSMutableDictionary<NSAttributedStringKey, id> *attributes = [incoming mutableCopy] ?: [NSMutableDictionary dictionary];
+        attributes[NSFontAttributeName] = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
+        return attributes.copy;
+    };
+    playButton.configuration = playButtonConfiguration;
     [playButton addTarget:self action:@selector(playButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     self.playButton = playButton;
 
@@ -1731,15 +1738,19 @@ static SonoraMyWaveLook SonoraCurrentMyWaveLook(void) {
     NSString *symbol = self.playing ? @"pause.fill" : @"play.fill";
     NSString *title = self.playing ? @"Pause" : @"Play";
     UIImage *image = [UIImage systemImageNamed:symbol withConfiguration:config];
-    [self.playButton setImage:image forState:UIControlStateNormal];
-    [self.playButton setTitle:title forState:UIControlStateNormal];
+    UIButtonConfiguration *buttonConfiguration = self.playButton.configuration ?: [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.image = image;
+    buttonConfiguration.title = title;
+    self.playButton.configuration = buttonConfiguration;
 }
 
 - (void)updateThemeColors {
     self.titleLabel.textColor = UIColor.labelColor;
     UIColor *buttonColor = [UIColor.labelColor colorWithAlphaComponent:(self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight ? 0.88 : 0.96)];
     self.playButton.tintColor = buttonColor;
-    [self.playButton setTitleColor:buttonColor forState:UIControlStateNormal];
+    UIButtonConfiguration *buttonConfiguration = self.playButton.configuration ?: [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.baseForegroundColor = buttonColor;
+    self.playButton.configuration = buttonConfiguration;
 }
 
 - (void)updateWaveLookAnimated:(BOOL)animated {
@@ -3019,8 +3030,12 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)viewController API_AVAILABLE(ios(14.0)) {
-    [self storeAccentColor:viewController.selectedColor];
+- (void)colorPickerViewController:(UIColorPickerViewController *)viewController
+                   didSelectColor:(UIColor *)color
+                     continuously:(BOOL)continuously API_AVAILABLE(ios(15.0)) {
+    (void)viewController;
+    (void)continuously;
+    [self storeAccentColor:color];
     [self refreshAccentColorLabel];
     [self notifyPlayerSettingsChanged];
 }
@@ -3624,12 +3639,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
                     return;
                 }
 
-                UIDocumentPickerViewController *picker = nil;
-                if (@available(iOS 14.0, *)) {
-                    picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[temporaryURL] asCopy:YES];
-                } else {
-                    picker = [[UIDocumentPickerViewController alloc] initWithURL:temporaryURL inMode:UIDocumentPickerModeExportToService];
-                }
+                UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[temporaryURL] asCopy:YES];
                 picker.delegate = innerSelf;
                 picker.modalPresentationStyle = UIModalPresentationFormSheet;
                 innerSelf.pendingBackupExportURL = temporaryURL;
@@ -3644,9 +3654,8 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     if (self.backupOperationInProgress) {
         return;
     }
-    UIDocumentPickerViewController *picker =
-    [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.data"]
-                                                           inMode:UIDocumentPickerModeImport];
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeData]
+                                                                                                          asCopy:YES];
     picker.delegate = self;
     picker.modalPresentationStyle = UIModalPresentationFormSheet;
     self.backupPickerImportMode = YES;
@@ -3998,7 +4007,7 @@ static NSString * const SonoraSettingsGitHubDisplayString = @"femboypig/Sonora";
     NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:304.0]
                                                                         heightDimension:[NSCollectionLayoutDimension absoluteDimension:140.0]];
     NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup verticalGroupWithLayoutSize:groupSize
-                                                                                    subitem:item
+                                                                         repeatingSubitem:item
                                                                                       count:2];
     group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:8.0];
 

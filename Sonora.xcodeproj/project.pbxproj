@@ -423,7 +423,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = SonoraLovelyWidget/SonoraLovelyWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 169;
+				CURRENT_PROJECT_VERSION = 198;
 				DEVELOPMENT_TEAM = G543SDPWN3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SonoraLovelyWidget/Info.plist;
@@ -433,7 +433,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 12.0f;
+				MARKETING_VERSION = 26.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ru.hippo.Sonora.LovelyWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -450,7 +450,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = SonoraLovelyWidget/SonoraLovelyWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 169;
+				CURRENT_PROJECT_VERSION = 198;
 				DEVELOPMENT_TEAM = G543SDPWN3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SonoraLovelyWidget/Info.plist;
@@ -460,7 +460,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 12.0f;
+				MARKETING_VERSION = 26.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ru.hippo.Sonora.LovelyWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
