@@ -121,6 +121,32 @@ static NSArray<AVMetadataItem *> *SonoraMergedID3Metadata(NSArray<AVMetadataItem
 
     return merged;
 }
+
+static UIImage *SonoraSquareArtworkImage(UIImage *image) {
+    if (image == nil) {
+        return nil;
+    }
+
+    CGSize size = image.size;
+    CGFloat side = floor(MIN(size.width, size.height));
+    if (side <= 1.0) {
+        return image;
+    }
+    if (fabs(size.width - side) < 0.5 && fabs(size.height - side) < 0.5) {
+        return image;
+    }
+
+    CGRect cropRect = CGRectMake((size.width - side) * 0.5,
+                                 (size.height - side) * 0.5,
+                                 side,
+                                 side);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(side, side)];
+    UIImage *cropped = [renderer imageWithActions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
+        (void)rendererContext;
+        [image drawAtPoint:CGPointMake(-CGRectGetMinX(cropRect), -CGRectGetMinY(cropRect))];
+    }];
+    return cropped ?: image;
+}
 static NSString * const kDiagnosticsDirectoryName = @"SonoraDiagnostics";
 static NSString * const kDiagnosticsLogFileName = @"runtime.log";
 static NSString * const kDiagnosticsLogFileBackupName = @"runtime-prev.log";
@@ -3411,11 +3437,12 @@ static NSData *SonoraEncodedCoverData(UIImage *image) {
         info[MPNowPlayingInfoPropertyPlaybackQueueIndex] = @(queueIndex);
     }
 
-    if (track.artwork != nil) {
-        MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:track.artwork.size
+    UIImage *nowPlayingArtworkImage = SonoraSquareArtworkImage(track.artwork);
+    if (nowPlayingArtworkImage != nil) {
+        MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:nowPlayingArtworkImage.size
                                                                        requestHandler:^UIImage * _Nonnull(CGSize size) {
             (void)size;
-            return track.artwork;
+            return nowPlayingArtworkImage;
         }];
         info[MPMediaItemPropertyArtwork] = artwork;
     }
