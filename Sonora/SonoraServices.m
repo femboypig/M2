@@ -59,15 +59,25 @@ static NSString *SonoraServicesRemovingYouTubeTopicSuffix(NSString *value) {
     }
 
     NSArray<NSString *> *suffixes = @[@" - Topic", @" – Topic", @" — Topic"];
-    NSString *lowercased = trimmed.lowercaseString;
-    for (NSString *suffix in suffixes) {
-        NSString *lowercasedSuffix = suffix.lowercaseString;
-        if ([lowercased hasSuffix:lowercasedSuffix] && trimmed.length > suffix.length) {
-            NSString *stripped = [trimmed substringToIndex:(trimmed.length - suffix.length)];
-            return SonoraServicesTrimmedStringValue(stripped);
+    NSMutableArray<NSString *> *normalizedSegments = [[NSMutableArray alloc] init];
+    for (NSString *segment in [trimmed componentsSeparatedByString:@","]) {
+        NSString *trimmedSegment = SonoraServicesTrimmedStringValue(segment);
+        NSString *lowercasedSegment = trimmedSegment.lowercaseString;
+        for (NSString *suffix in suffixes) {
+            NSString *lowercasedSuffix = suffix.lowercaseString;
+            if ([lowercasedSegment hasSuffix:lowercasedSuffix] && trimmedSegment.length > suffix.length) {
+                trimmedSegment = SonoraServicesTrimmedStringValue([trimmedSegment substringToIndex:(trimmedSegment.length - suffix.length)]);
+                break;
+            }
+        }
+        if (trimmedSegment.length > 0) {
+            [normalizedSegments addObject:trimmedSegment];
         }
     }
 
+    if (normalizedSegments.count > 0) {
+        return [normalizedSegments componentsJoinedByString:@", "];
+    }
     return trimmed;
 }
 

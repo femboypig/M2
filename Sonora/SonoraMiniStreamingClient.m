@@ -22,6 +22,43 @@ static NSString *SonoraTrimmedStringValue(id value) {
     return trimmed ?: @"";
 }
 
+static NSString *SonoraMiniStreamingSanitizedArtistSegment(NSString *value) {
+    NSString *trimmed = SonoraTrimmedStringValue(value);
+    if (trimmed.length == 0) {
+        return @"";
+    }
+
+    NSArray<NSString *> *suffixes = @[@" - Topic", @" – Topic", @" — Topic"];
+    NSString *lowercased = trimmed.lowercaseString;
+    for (NSString *suffix in suffixes) {
+        NSString *lowercasedSuffix = suffix.lowercaseString;
+        if ([lowercased hasSuffix:lowercasedSuffix] && trimmed.length > suffix.length) {
+            return SonoraTrimmedStringValue([trimmed substringToIndex:(trimmed.length - suffix.length)]);
+        }
+    }
+
+    return trimmed;
+}
+
+static NSString *SonoraMiniStreamingSanitizedArtistsString(NSString *value) {
+    NSString *trimmed = SonoraTrimmedStringValue(value);
+    if (trimmed.length == 0) {
+        return @"";
+    }
+
+    NSMutableArray<NSString *> *normalizedSegments = [[NSMutableArray alloc] init];
+    for (NSString *segment in [trimmed componentsSeparatedByString:@","]) {
+        NSString *normalizedSegment = SonoraMiniStreamingSanitizedArtistSegment(segment);
+        if (normalizedSegment.length > 0) {
+            [normalizedSegments addObject:normalizedSegment];
+        }
+    }
+    if (normalizedSegments.count > 0) {
+        return [normalizedSegments componentsJoinedByString:@", "];
+    }
+    return SonoraMiniStreamingSanitizedArtistSegment(trimmed);
+}
+
 static NSString *SonoraMiniStreamingConfigValue(NSString *key, NSString *fallback) {
     NSString *environmentValue = SonoraTrimmedStringValue(NSProcessInfo.processInfo.environment[key]);
     if (environmentValue.length > 0) {
@@ -50,11 +87,15 @@ static NSString *SonoraMiniStreamingCurrentEngineValue(void) {
 }
 
 static NSString *SonoraMiniStreamingPreferredYouTubeArtworkURL(NSString *trackID, NSString *fallbackURL) {
+    NSString *normalizedFallbackURL = SonoraTrimmedStringValue(fallbackURL);
+    if (normalizedFallbackURL.length > 0) {
+        return normalizedFallbackURL;
+    }
     NSString *normalizedTrackID = SonoraTrimmedStringValue(trackID);
     if (normalizedTrackID.length == 11 && [SonoraMiniStreamingCurrentEngineValue() isEqualToString:@"youtube"]) {
         return [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/maxresdefault.jpg", normalizedTrackID];
     }
-    return SonoraTrimmedStringValue(fallbackURL);
+    return normalizedFallbackURL;
 }
 
 @implementation SonoraMiniStreamingTrack
@@ -368,7 +409,7 @@ static NSString *SonoraMiniStreamingPreferredYouTubeArtworkURL(NSString *trackID
             [artists addObject:artistName];
         }
     }
-    track.artists = artists.count > 0 ? [artists componentsJoinedByString:@", "] : @"Unknown artist";
+    track.artists = artists.count > 0 ? SonoraMiniStreamingSanitizedArtistsString([artists componentsJoinedByString:@", "]) : @"Unknown artist";
 
     NSDictionary *externalURLs = [item[@"external_urls"] isKindOfClass:NSDictionary.class] ? item[@"external_urls"] : nil;
     NSString *spotifyURL = SonoraTrimmedStringValue(externalURLs[@"spotify"]);
@@ -1394,9 +1435,9 @@ static NSString *SonoraMiniStreamingPreferredYouTubeArtworkURL(NSString *trackID
     }
 
     NSString *resolvedTitle = SonoraTrimmedStringValue(dataNode[@"title"]);
-    NSString *resolvedArtist = SonoraTrimmedStringValue(dataNode[@"author"]);
+    NSString *resolvedArtist = SonoraMiniStreamingSanitizedArtistsString(SonoraTrimmedStringValue(dataNode[@"author"]));
     if (resolvedArtist.length == 0) {
-        resolvedArtist = SonoraTrimmedStringValue(dataNode[@"artist"]);
+        resolvedArtist = SonoraMiniStreamingSanitizedArtistsString(SonoraTrimmedStringValue(dataNode[@"artist"]));
     }
     NSString *resolvedAlbum = SonoraTrimmedStringValue(dataNode[@"album"]);
     if (resolvedAlbum.length == 0) {
