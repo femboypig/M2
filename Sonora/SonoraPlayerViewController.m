@@ -430,7 +430,7 @@ NSArray<UIColor *> *SonoraResolvedWavePalette(UIImage * _Nullable image);
         [content.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [content.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        [artworkView.topAnchor constraintEqualToAnchor:safe.topAnchor],
+        [artworkView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8.0],
         self.artworkLeadingConstraint,
         self.artworkTrailingConstraint,
         artworkSquare,
