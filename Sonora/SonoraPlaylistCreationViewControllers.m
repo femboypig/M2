@@ -278,6 +278,7 @@ replacementString:(NSString *)string {
 - (void)setupTableView {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    tableView.backgroundColor = SonoraAppBackgroundColor();
     tableView.dataSource = self;
     tableView.delegate = self;
     tableView.rowHeight = 54.0;

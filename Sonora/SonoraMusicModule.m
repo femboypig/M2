@@ -447,6 +447,7 @@ typedef void (^SonoraMiniStreamingInstallHandler)(SonoraMiniStreamingTrack *trac
 - (void)setupTableView {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    tableView.backgroundColor = SonoraAppBackgroundColor();
     tableView.dataSource = self;
     tableView.delegate = self;
     tableView.rowHeight = 54.0;
@@ -979,6 +980,7 @@ typedef NS_ENUM(NSInteger, SonoraSearchSectionType) {
 - (void)setupTableView {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    tableView.backgroundColor = SonoraAppBackgroundColor();
     tableView.dataSource = self;
     tableView.delegate = self;
     tableView.rowHeight = 54.0;
@@ -3470,6 +3472,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (void)setupTableView {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    tableView.backgroundColor = SonoraAppBackgroundColor();
     tableView.dataSource = self;
     tableView.delegate = self;
     tableView.rowHeight = 56.0;
