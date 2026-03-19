@@ -419,8 +419,10 @@ static void SonoraApplyAppBackgroundToViewHierarchy(UIView *view) {
         UINavigationController *navigation = [self selectedNavigationController];
         UIViewController *active = navigation.visibleViewController ?: navigation.topViewController;
         active = [self resolvedTopPresentedViewControllerFrom:active];
-        active.view.backgroundColor = SonoraAppBackgroundColor();
-        SonoraApplyAppBackgroundToViewHierarchy(active.view);
+        if (active.isViewLoaded) {
+            active.view.backgroundColor = SonoraAppBackgroundColor();
+            SonoraApplyAppBackgroundToViewHierarchy(active.view);
+        }
     }
     [self updateMiniPlayer];
 }
