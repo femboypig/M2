@@ -386,7 +386,7 @@ typedef void (^SonoraMiniStreamingInstallHandler)(SonoraMiniStreamingTrack *trac
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
     self.navigationItem.title = nil;
     self.navigationItem.rightBarButtonItem = nil;
     self.compactTitleVisible = NO;
@@ -897,7 +897,7 @@ typedef NS_ENUM(NSInteger, SonoraSearchSectionType) {
     self.navigationItem.titleView = nil;
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraWhiteSectionTitleLabel(pageTitle)];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
     if (self.musicOnlyMode) {
         self.navigationItem.hidesBackButton = YES;
     }
@@ -1010,7 +1010,7 @@ typedef NS_ENUM(NSInteger, SonoraSearchSectionType) {
     UICollectionViewCompositionalLayout *layout = [self buildSearchCollectionLayout];
     UICollectionView *collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     collectionView.translatesAutoresizingMaskIntoConstraints = NO;
-    collectionView.backgroundColor = UIColor.systemBackgroundColor;
+    collectionView.backgroundColor = SonoraAppBackgroundColor();
     collectionView.alwaysBounceVertical = YES;
     collectionView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     collectionView.dataSource = self;
@@ -3407,7 +3407,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     self.navigationItem.hidesBackButton = YES;
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraWhiteSectionTitleLabel(@"Playlists")];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
 
     [self setupTableView];
     [self setupSearch];
@@ -3847,7 +3847,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     self.navigationItem.hidesBackButton = YES;
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:SonoraWhiteSectionTitleLabel(@"Favorites")];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
     UIBarButtonItem *searchItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]
                                                                                style:UIBarButtonItemStylePlain
                                                                               target:self
@@ -4980,7 +4980,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     self.navigationItem.titleView = nil;
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.navigationItem.rightBarButtonItem = nil;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
 
     [self setupTableView];
     [self setupSearch];

@@ -28,7 +28,7 @@
 
     self.title = @"Create Playlist";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
 
     [self setupUI];
     [self updateNameUI];
@@ -259,7 +259,7 @@ replacementString:(NSString *)string {
 
     self.title = @"Select Music";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
 
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Create"
                                                                                style:UIBarButtonItemStyleDone
@@ -440,7 +440,7 @@ replacementString:(NSString *)string {
 
     self.title = @"Add Music";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
 
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Add"
                                                                                style:UIBarButtonItemStyleDone
@@ -613,7 +613,7 @@ replacementString:(NSString *)string {
 
     self.title = @"Change Playlist Cover";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = SonoraAppBackgroundColor();
 
     [self setupUI];
     [self reloadPreview];
