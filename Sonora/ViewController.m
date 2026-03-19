@@ -35,12 +35,7 @@ static UIColor *SonoraTabInactiveIconColor(void) {
 }
 
 static UIColor *SonoraTabBarBackgroundColor(void) {
-    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-        if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:0.02 alpha:1.0];
-        }
-        return [UIColor colorWithWhite:0.985 alpha:1.0];
-    }];
+    return SonoraAppBackgroundColor();
 }
 
 static UIColor *SonoraMiniPlayerBackgroundColor(void) {
@@ -252,6 +247,7 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
 - (void)handlePlayerSettingsChanged {
     UIColor *accentColor = SonoraAccentYellowColor();
     self.view.tintColor = accentColor;
+    [self setupAppearance];
     [self applyActiveTabAccentColor:accentColor];
 }
 

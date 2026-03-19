@@ -32,6 +32,8 @@ FOUNDATION_EXTERN BOOL SonoraSettingsUseArtworkBasedPlayerBackgroundEnabled(void
 FOUNDATION_EXTERN void SonoraSettingsSetUseArtworkBasedPlayerBackgroundEnabled(BOOL enabled);
 FOUNDATION_EXTERN BOOL SonoraSettingsUseAccentAppBackgroundEnabled(void);
 FOUNDATION_EXTERN void SonoraSettingsSetUseAccentAppBackgroundEnabled(BOOL enabled);
+FOUNDATION_EXTERN NSString * _Nullable SonoraSettingsAppBackgroundHex(void);
+FOUNDATION_EXTERN void SonoraSettingsStoreAppBackgroundHex(NSString * _Nullable hex);
 
 FOUNDATION_EXTERN BOOL SonoraSettingsAutoSaveStreamingSongsEnabled(void);
 FOUNDATION_EXTERN void SonoraSettingsSetAutoSaveStreamingSongsEnabled(BOOL enabled);

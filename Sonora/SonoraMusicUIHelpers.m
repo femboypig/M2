@@ -133,12 +133,16 @@ UIColor *SonoraPlayerBackgroundColor(void) {
 UIColor *SonoraAppBackgroundColor(void) {
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
         UIColor *baseColor = [UIColor.systemBackgroundColor resolvedColorWithTraitCollection:trait];
-        if (!SonoraSettingsUseAccentAppBackgroundEnabled()) {
+        UIColor *customColor = SonoraColorFromHexString(SonoraSettingsAppBackgroundHex());
+        if (customColor == nil && SonoraSettingsUseAccentAppBackgroundEnabled()) {
+            customColor = SonoraAccentYellowColor();
+        }
+        if (customColor == nil) {
             return baseColor;
         }
-        UIColor *accentColor = [SonoraAccentYellowColor() resolvedColorWithTraitCollection:trait];
-        CGFloat amount = (trait.userInterfaceStyle == UIUserInterfaceStyleDark) ? 0.18 : 0.10;
-        return SonoraBlendColors(baseColor, accentColor, amount);
+        UIColor *resolvedCustomColor = [customColor resolvedColorWithTraitCollection:trait];
+        CGFloat amount = (trait.userInterfaceStyle == UIUserInterfaceStyleDark) ? 0.18 : 0.12;
+        return SonoraBlendColors(baseColor, resolvedCustomColor, amount);
     }];
 }
 

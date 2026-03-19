@@ -14,6 +14,7 @@ static NSString * const SonoraSettingsMyWaveLookKey = @"sonora.settings.myWaveLo
 static NSString * const SonoraSettingsStreamingSearchEngineKey = @"sonora.settings.streamingSearchEngine";
 static NSString * const SonoraSettingsArtworkBasedPlayerBackgroundKey = @"sonora.settings.useArtworkBasedPlayerBackground";
 static NSString * const SonoraSettingsAccentAppBackgroundKey = @"sonora.settings.useAccentAppBackground";
+static NSString * const SonoraSettingsAppBackgroundHexKey = @"sonora.settings.appBackgroundHex";
 static NSString * const SonoraSettingsAutoSaveStreamingSongsKey = @"sonora.settings.autoSaveStreamingSongs";
 
 static NSUserDefaults *SonoraSettingsDefaults(void) {
@@ -111,6 +112,21 @@ BOOL SonoraSettingsUseAccentAppBackgroundEnabled(void) {
 
 void SonoraSettingsSetUseAccentAppBackgroundEnabled(BOOL enabled) {
     [SonoraSettingsDefaults() setBool:enabled forKey:SonoraSettingsAccentAppBackgroundKey];
+}
+
+NSString *SonoraSettingsAppBackgroundHex(void) {
+    return [SonoraSettingsDefaults() stringForKey:SonoraSettingsAppBackgroundHexKey];
+}
+
+void SonoraSettingsStoreAppBackgroundHex(NSString * _Nullable hex) {
+    NSUserDefaults *defaults = SonoraSettingsDefaults();
+    NSString *trimmed = [[hex ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] copy];
+    if (trimmed.length == 0) {
+        [defaults removeObjectForKey:SonoraSettingsAppBackgroundHexKey];
+    } else {
+        [defaults setObject:trimmed forKey:SonoraSettingsAppBackgroundHexKey];
+    }
+    [defaults removeObjectForKey:SonoraSettingsAccentAppBackgroundKey];
 }
 
 BOOL SonoraSettingsAutoSaveStreamingSongsEnabled(void) {
