@@ -7,6 +7,7 @@
 
 #import "SonoraSettings.h"
 #import "SonoraServices.h"
+#import "SonoraWaveBackgroundViews.h"
 
 NSString * const SonoraLovelyPlaylistDefaultsKey = @"sonora_lovely_playlist_id_v1";
 NSString * const SonoraSharedPlaylistSyntheticPrefix = @"shared:";
