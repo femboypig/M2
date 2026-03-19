@@ -113,9 +113,9 @@ static UIColor * _Nullable SonoraCurrentArtworkAppBackgroundSourceColor(UITraitC
     UIColor *candidate = nil;
     if (palette.count >= 4) {
         candidate = SonoraBlendColors(
-            SonoraBlendColors(palette[0], palette[1], 0.48),
-            SonoraBlendColors(palette[2], palette[3], 0.32),
-            0.42
+            palette[0],
+            SonoraBlendColors(palette[1], palette[2], 0.28),
+            0.34
         );
     } else if (palette.count > 0) {
         candidate = palette.firstObject;
@@ -179,8 +179,8 @@ UIColor *SonoraAppBackgroundColor(void) {
         UIColor *resolvedCustomColor = [customColor resolvedColorWithTraitCollection:trait];
         BOOL artworkMode = (SonoraSettingsAppBackgroundMode() == SonoraAppBackgroundModeArtwork);
         CGFloat amount = (trait.userInterfaceStyle == UIUserInterfaceStyleDark)
-            ? (artworkMode ? 0.16 : 0.18)
-            : (artworkMode ? 0.11 : 0.12);
+            ? (artworkMode ? 0.22 : 0.18)
+            : (artworkMode ? 0.18 : 0.12);
         return SonoraBlendColors(baseColor, resolvedCustomColor, amount);
     }];
 }

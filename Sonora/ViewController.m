@@ -61,6 +61,20 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     }];
 }
 
+static void SonoraApplyAppBackgroundToViewHierarchy(UIView *view) {
+    if (![view isKindOfClass:UIView.class]) {
+        return;
+    }
+
+    if ([view isKindOfClass:UITableView.class] || [view isKindOfClass:UICollectionView.class]) {
+        view.backgroundColor = SonoraAppBackgroundColor();
+    }
+
+    for (UIView *subview in view.subviews) {
+        SonoraApplyAppBackgroundToViewHierarchy(subview);
+    }
+}
+
 @interface ViewController () <UITabBarControllerDelegate, UINavigationControllerDelegate>
 
 @property (nonatomic, strong) UIView *miniPlayerContainer;
@@ -402,6 +416,11 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
         self.view.backgroundColor = SonoraAppBackgroundColor();
         self.miniPlayerContainer.backgroundColor = SonoraMiniPlayerBackgroundColor();
         self.miniPlayerContainer.layer.borderColor = SonoraMiniPlayerBorderColor().CGColor;
+        UINavigationController *navigation = [self selectedNavigationController];
+        UIViewController *active = navigation.visibleViewController ?: navigation.topViewController;
+        active = [self resolvedTopPresentedViewControllerFrom:active];
+        active.view.backgroundColor = SonoraAppBackgroundColor();
+        SonoraApplyAppBackgroundToViewHierarchy(active.view);
     }
     [self updateMiniPlayer];
 }
