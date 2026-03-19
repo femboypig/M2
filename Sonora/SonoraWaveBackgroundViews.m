@@ -645,19 +645,19 @@ static CATransform3D SonoraWaveTransform(CGFloat scale, CGFloat rotation) {
     CGFloat progress = ((CGFloat)index) / count;
     CGFloat phase = (self.pulseSeed * (CGFloat)(M_PI * 2.0)) + (((CGFloat)variant) * 0.86f) + (progress * 1.15f);
 
-    CGFloat centerX = (width * 0.50f) + (sinf(phase * 0.72f) * width * 0.018f);
-    CGFloat centerY = (height * 0.53f) + (cosf((phase * 0.54f) + 0.6f) * height * 0.022f);
+    CGFloat centerX = (width * 0.50f) + (sinf(phase * 0.58f) * width * 0.012f);
+    CGFloat centerY = (height * 0.53f) + (cosf((phase * 0.46f) + 0.6f) * height * 0.016f);
     CGFloat radiusX = width * (0.17f + (progress * 0.23f));
     CGFloat radiusY = height * (0.13f + (progress * 0.17f));
-    CGFloat amplitude = MIN(width, height) * (0.014f + (progress * 0.010f));
-    NSUInteger pointCount = 56;
+    CGFloat amplitude = MIN(width, height) * (0.008f + (progress * 0.006f));
+    NSUInteger pointCount = 48;
 
     UIBezierPath *path = [UIBezierPath bezierPath];
     for (NSUInteger point = 0; point <= pointCount; point += 1) {
         CGFloat angle = (((CGFloat)point) / ((CGFloat)pointCount)) * (CGFloat)(M_PI * 2.0);
-        CGFloat wobbleA = sinf((angle * 2.0f) + phase) * amplitude;
-        CGFloat wobbleB = cosf((angle * 3.0f) - (phase * 0.74f)) * amplitude * 0.54f;
-        CGFloat wobbleC = sinf((angle * 5.0f) + (phase * 1.12f)) * amplitude * 0.20f;
+        CGFloat wobbleA = sinf((angle * 1.4f) + phase) * amplitude;
+        CGFloat wobbleB = cosf((angle * 2.1f) - (phase * 0.58f)) * amplitude * 0.38f;
+        CGFloat wobbleC = sinf((angle * 3.2f) + (phase * 0.92f)) * amplitude * 0.12f;
         CGFloat x = centerX + (cosf(angle) * (radiusX + wobbleA + wobbleB));
         CGFloat y = centerY + (sinf(angle) * (radiusY + (wobbleA * 0.72f) - (wobbleB * 0.16f) + wobbleC));
         CGPoint p = CGPointMake(x, y);
