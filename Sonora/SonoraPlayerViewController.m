@@ -140,7 +140,6 @@ NSArray<UIColor *> *SonoraResolvedWavePalette(UIImage * _Nullable image);
 @property (nonatomic, strong) UIActivityIndicatorView *artworkLoadingSpinner;
 @property (nonatomic, strong) NSLayoutConstraint *artworkLeadingConstraint;
 @property (nonatomic, strong) NSLayoutConstraint *artworkTrailingConstraint;
-@property (nonatomic, strong) NSLayoutConstraint *artworkTopConstraint;
 @property (nonatomic, strong) NSLayoutConstraint *controlsBottomConstraint;
 @property (nonatomic, strong, nullable) UIColor *currentArtworkBackgroundColor;
 @property (nonatomic, assign) BOOL scrubbing;
@@ -419,8 +418,7 @@ NSArray<UIColor *> *SonoraResolvedWavePalette(UIImage * _Nullable image);
     self.artworkTrailingConstraint = [artworkView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
-    self.controlsBottomConstraint = [controlsRow.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-16.0];
-    self.artworkTopConstraint = [artworkView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:10.0];
+    self.controlsBottomConstraint = [controlsRow.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-6.0];
     [NSLayoutConstraint activateConstraints:@[
         [backgroundColorView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [backgroundColorView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -432,7 +430,7 @@ NSArray<UIColor *> *SonoraResolvedWavePalette(UIImage * _Nullable image);
         [content.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [content.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        self.artworkTopConstraint,
+        [artworkView.topAnchor constraintEqualToAnchor:safe.topAnchor],
         self.artworkLeadingConstraint,
         self.artworkTrailingConstraint,
         artworkSquare,
@@ -575,8 +573,15 @@ NSArray<UIColor *> *SonoraResolvedWavePalette(UIImage * _Nullable image);
 }
 
 - (void)updateControlsBottomInset {
-    CGFloat safeInset = self.view.safeAreaInsets.bottom;
-    CGFloat bottomInset = MAX(12.0, MIN(20.0, 8.0 + (safeInset * 0.34)));
+    CGFloat maxDimension = MAX(CGRectGetWidth(self.view.bounds), CGRectGetHeight(self.view.bounds));
+    CGFloat bottomInset = 6.0;
+    if (maxDimension >= 926.0) {
+        bottomInset = 18.0;
+    } else if (maxDimension >= 852.0) {
+        bottomInset = 14.0;
+    } else if (maxDimension >= 812.0) {
+        bottomInset = 10.0;
+    }
     self.controlsBottomConstraint.constant = -bottomInset;
 }
 
