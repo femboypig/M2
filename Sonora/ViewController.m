@@ -43,10 +43,8 @@ static UIColor *SonoraMiniPlayerBackgroundColor(void) {
         return UIColor.clearColor;
     }
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-        if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:0.0 alpha:0.30];
-        }
-        return [UIColor colorWithWhite:1.0 alpha:0.32];
+        UIColor *base = [SonoraAppBackgroundColor() resolvedColorWithTraitCollection:trait];
+        return [base colorWithAlphaComponent:(trait.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.82 : 0.88)];
     }];
 }
 
@@ -248,6 +246,8 @@ static UIColor *SonoraMiniPlayerBorderColor(void) {
     UIColor *accentColor = SonoraAccentYellowColor();
     self.view.tintColor = accentColor;
     [self setupAppearance];
+    self.miniPlayerContainer.backgroundColor = SonoraMiniPlayerBackgroundColor();
+    self.miniPlayerContainer.layer.borderColor = SonoraMiniPlayerBorderColor().CGColor;
     [self applyActiveTabAccentColor:accentColor];
 }
 
