@@ -3901,6 +3901,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (void)setupTableView {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    tableView.backgroundColor = SonoraAppBackgroundColor();
     tableView.dataSource = self;
     tableView.delegate = self;
     tableView.rowHeight = 54.0;
@@ -5035,6 +5036,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (void)setupTableView {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    tableView.backgroundColor = SonoraAppBackgroundColor();
     tableView.dataSource = self;
     tableView.delegate = self;
     tableView.rowHeight = 54.0;
@@ -5119,6 +5121,7 @@ leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
 - (UIView *)headerViewForWidth:(CGFloat)width {
     CGFloat totalWidth = MAX(width, 320.0);
     UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalWidth, 374.0)];
+    header.backgroundColor = SonoraAppBackgroundColor();
 
     UIImageView *coverView = [[UIImageView alloc] initWithFrame:CGRectMake((totalWidth - 212.0) * 0.5, 16.0, 212.0, 212.0)];
     coverView.layer.cornerRadius = 16.0;
